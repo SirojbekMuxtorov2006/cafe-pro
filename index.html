@@ -1,0 +1,1223 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Oshxona & Restoran POS Boshqaruv Tizimi</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- ================= YUQORI ASOSIY PANEL (HEADER) ================= -->
+  <header class="header">
+    <div class="header-left">
+      <button class="btn-sidebar-toggle" id="btnToggleSidebar" title="Saydbarni ochish/yopish">
+        <span class="icon">☰</span>
+      </button>
+      <div class="logo-box" id="headerHomeLogo" title="Dashboardga o'tish">
+        <span class="logo-icon">🍽️</span>
+        <div>
+          <h1 id="headerRestTitle">OSHXONA POS</h1>
+          <p class="subtitle" id="headerRestSubtitle">Restoran va Oshxona Boshqaruvi</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tezkor ko'rsatkichlar (KPI) -->
+    <div class="header-center">
+      <div class="stat-pill" title="Bugungi jami savdo">
+        <span class="stat-pill-label">Savdo:</span>
+        <span class="stat-pill-val text-green" id="headStatSales">0 so'm</span>
+      </div>
+      <div class="stat-pill" title="Faol ochiq buyurtmalar">
+        <span class="stat-pill-label">Faol zakaz:</span>
+        <span class="stat-pill-val text-blue" id="headStatActiveOrders">0 ta</span>
+      </div>
+      <div class="stat-pill" title="Oshxonada tayyorlanayotgan taomlar">
+        <span class="stat-pill-label">Oshxona:</span>
+        <span class="stat-pill-val text-orange" id="headStatKitchen">0 ta</span>
+      </div>
+      <div class="stat-pill" title="Band stollar nisbati">
+        <span class="stat-pill-label">Stollar:</span>
+        <span class="stat-pill-val text-purple" id="headStatTables">0 / 16</span>
+      </div>
+    </div>
+
+    <!-- O'ng tomon: Soat, Tezkor harakatlar va Rol tanlash -->
+    <div class="header-right">
+      <div class="live-clock" id="liveClock">00:00:00</div>
+      
+      <!-- Foydalanuvchi / Rol tugmasi -->
+      <button class="btn btn-user-role" id="btnOpenRoleSwitch" title="Xodim va rolni almashtirish">
+        <span class="user-role-avatar" id="headUserAvatar">👑</span>
+        <div class="user-role-text">
+          <strong id="headUserName">Admin</strong>
+          <small id="headUserRole">Administrator</small>
+        </div>
+      </button>
+
+      <!-- Yangi Buyurtma tezkor tugmasi -->
+      <button class="btn btn-primary btn-sm btn-head-action" id="btnHeadNewOrder">
+        <span>➕ Yangi Buyurtma</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ================= ASOSIY DASTUR TUZILMASI ================= -->
+  <div class="pos-app-layout" id="posAppLayout">
+
+    <!-- ================= CHAP SAYDBAR (12 TA BO'LIM) ================= -->
+    <aside class="pos-sidebar" id="posSidebar">
+      <div class="sidebar-top">
+        <span class="sidebar-top-title">ASOSIY MENYU</span>
+        <button class="sidebar-collapse-btn" id="btnCollapseSidebar" title="Saydbarni kichraytirish">◀</button>
+      </div>
+
+      <nav class="sidebar-nav" id="sidebarNav">
+        <button class="nav-item active" data-view="dashboard">
+          <span class="nav-icon">📊</span>
+          <span class="nav-label">Dashboard</span>
+        </button>
+
+        <button class="nav-item" data-view="tables">
+          <span class="nav-icon">🪑</span>
+          <span class="nav-label">Stollar</span>
+          <span class="nav-badge badge-blue" id="navBadgeTables">0</span>
+        </button>
+
+        <button class="nav-item" data-view="orders">
+          <span class="nav-icon">📝</span>
+          <span class="nav-label">Buyurtmalar</span>
+          <span class="nav-badge badge-green" id="navBadgeActiveOrders">0</span>
+        </button>
+
+        <button class="nav-item" data-view="kitchen">
+          <span class="nav-icon">👨‍🍳</span>
+          <span class="nav-label">Oshxona</span>
+          <span class="nav-badge badge-orange" id="navBadgeKitchen">0</span>
+        </button>
+
+        <button class="nav-item" data-view="cashier">
+          <span class="nav-icon">💵</span>
+          <span class="nav-label">Kassa</span>
+          <span class="nav-badge badge-purple" id="navBadgeCashier">0</span>
+        </button>
+
+        <div class="nav-divider"></div>
+
+        <button class="nav-item" data-view="menu">
+          <span class="nav-icon">📋</span>
+          <span class="nav-label">Menu (Taomlar)</span>
+        </button>
+
+        <button class="nav-item" data-view="categories">
+          <span class="nav-icon">📂</span>
+          <span class="nav-label">Kategoriyalar</span>
+        </button>
+
+        <button class="nav-item" data-view="customers">
+          <span class="nav-icon">👥</span>
+          <span class="nav-label">Mijozlar</span>
+        </button>
+
+        <button class="nav-item" data-view="staff">
+          <span class="nav-icon">👔</span>
+          <span class="nav-label">Xodimlar</span>
+        </button>
+
+        <div class="nav-divider"></div>
+
+        <button class="nav-item" data-view="reports">
+          <span class="nav-icon">📈</span>
+          <span class="nav-label">Hisobotlar</span>
+        </button>
+
+        <button class="nav-item" data-view="history">
+          <span class="nav-icon">📜</span>
+          <span class="nav-label">Buyurtmalar tarixi</span>
+        </button>
+
+        <button class="nav-item" data-view="settings">
+          <span class="nav-icon">⚙️</span>
+          <span class="nav-label">Sozlamalar</span>
+        </button>
+      </nav>
+
+      <!-- Saydbar pastki qismi: Xodim holati -->
+      <div class="sidebar-user-footer">
+        <div class="side-user-info">
+          <span class="side-user-role-dot"></span>
+          <span id="sideUserInfoText">Ali (Admin)</span>
+        </div>
+        <button class="btn-side-logout" id="btnSideSwitchUser" title="Xodimni almashtirish">🔄</button>
+      </div>
+    </aside>
+
+    <!-- Mobil overlay -->
+    <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+    <!-- ================= ASOSIY EKRANLAR (VIEW PANES) ================= -->
+    <main class="pos-main-content" id="posMainContent">
+
+      <!-- ================= 1. DASHBOARD ================= -->
+      <section class="view-pane active" id="viewDashboard">
+        <div class="view-header">
+          <div>
+            <h2>📊 Boshqaruv Paneli (Dashboard)</h2>
+            <p>Bugungi savdo, buyurtmalar va asosiy ko'rsatkichlar monitoringi</p>
+          </div>
+          <div class="view-header-actions">
+            <button class="btn btn-primary" onclick="navigateTo('orders')">➕ Yangi Buyurtma</button>
+            <button class="btn btn-secondary" onclick="navigateTo('cashier')">💵 Kassa</button>
+          </div>
+        </div>
+
+        <!-- Yuqori KPI Kartochkalari (7 ta asosiy ko'rsatkich) -->
+        <div class="dashboard-kpi-grid">
+          <div class="kpi-card kpi-sales">
+            <div class="kpi-icon">💰</div>
+            <div class="kpi-info">
+              <span class="kpi-title">Bugungi Savdo</span>
+              <strong class="kpi-value" id="dashTodaySales">0 so'm</strong>
+              <small class="kpi-sub" id="dashTotalRevenueSub">Kunlik tushum</small>
+            </div>
+          </div>
+
+          <div class="kpi-card kpi-orders">
+            <div class="kpi-icon">📝</div>
+            <div class="kpi-info">
+              <span class="kpi-title">Bugungi Buyurtmalar</span>
+              <strong class="kpi-value" id="dashTodayOrdersCount">0 ta</strong>
+              <small class="kpi-sub" id="dashClosedOrdersCount">0 ta to'langan</small>
+            </div>
+          </div>
+
+          <div class="kpi-card kpi-kitchen">
+            <div class="kpi-icon">👨‍🍳</div>
+            <div class="kpi-info">
+              <span class="kpi-title">Oshxonadagi Buyurtmalar</span>
+              <strong class="kpi-value" id="dashKitchenActiveCount">0 ta</strong>
+              <small class="kpi-sub">Tayyorlanmoqda / Yangi</small>
+            </div>
+          </div>
+
+          <div class="kpi-card kpi-tables-occ">
+            <div class="kpi-icon">🪑</div>
+            <div class="kpi-info">
+              <span class="kpi-title">Band Stollar</span>
+              <strong class="kpi-value text-danger" id="dashOccupiedTablesCount">0 ta</strong>
+              <small class="kpi-sub" id="dashWaitingBillCount">0 ta hisob kutmoqda</small>
+            </div>
+          </div>
+
+          <div class="kpi-card kpi-tables-vac">
+            <div class="kpi-icon">🟢</div>
+            <div class="kpi-info">
+              <span class="kpi-title">Bo'sh Stollar</span>
+              <strong class="kpi-value text-green" id="dashVacantTablesCount">16 ta</strong>
+              <small class="kpi-sub" id="dashTotalTablesSub">Jami 16 ta stol</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pastki qism: 2 ustun (Bugungi/Oxirgi buyurtmalar + Eng ko'p sotilgan taomlar) -->
+        <div class="dashboard-bottom-grid">
+          
+          <!-- Chap ustun: Bugungi va Oxirgi buyurtmalar -->
+          <div class="panel-box">
+            <div class="panel-box-header">
+              <h3>📝 Oxirgi Buyurtmalar</h3>
+              <button class="btn btn-text btn-sm" onclick="navigateTo('history')">Barchasini ko'rish ➔</button>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>№</th>
+                    <th>Stol</th>
+                    <th>Vaqt</th>
+                    <th>Taomlar</th>
+                    <th>Summa</th>
+                    <th>Holati</th>
+                    <th>Amal</th>
+                  </tr>
+                </thead>
+                <tbody id="dashRecentOrdersBody">
+                  <!-- JS orqali -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- O'ng ustun: Eng ko'p sotilgan taomlar -->
+          <div class="panel-box">
+            <div class="panel-box-header">
+              <h3>🏆 Eng Ko'p Sotilgan Taomlar</h3>
+              <small class="text-muted">Bugungi kun hisobidan</small>
+            </div>
+            <div class="top-dishes-list" id="dashTopDishesList">
+              <!-- JS orqali -->
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ================= 2. STOLLAR ================= -->
+      <section class="view-pane" id="viewTables">
+        <div class="view-header">
+          <div>
+            <h2>🪑 Stollar Boshqaruvi</h2>
+            <p>Stolni tanlab buyurtma ko'ring, yangi buyurtma oling yoki stolni ko'chiring</p>
+          </div>
+          
+          <!-- Stollar holati filtrlari -->
+          <div class="table-status-filters" id="tableFilters">
+            <button class="btn-filter active" data-filter="all">Barchasi (<span id="countAllTables">16</span>)</button>
+            <button class="btn-filter filter-vacant" data-filter="vacant">🟢 Bo'sh (<span id="countVacantTables">16</span>)</button>
+            <button class="btn-filter filter-occupied" data-filter="occupied">🔵 Band (<span id="countOccupiedTables">0</span>)</button>
+            <button class="btn-filter filter-preparing" data-filter="preparing">🟠 Tayyorlanmoqda (<span id="countPreparingTables">0</span>)</button>
+            <button class="btn-filter filter-waiting" data-filter="waiting_bill">🟣 Hisob kutmoqda (<span id="countWaitingTables">0</span>)</button>
+          </div>
+        </div>
+
+        <!-- Stollar Card Gridi (1..16 stollar) -->
+        <div class="pos-tables-grid" id="posTablesGrid">
+          <!-- JS orqali stollar kartochkalari -->
+        </div>
+      </section>
+
+      <!-- ================= 3. BUYURTMALAR (ZAKAZ OLISH) ================= -->
+      <section class="view-pane" id="viewOrders">
+        <div class="orders-create-layout">
+
+          <!-- CHAP QISM: STOL TANLASH, QIDIRUV VA MENYU TAOMLARI -->
+          <div class="order-menu-column">
+            
+            <!-- Yuqori qator: Stol tanlash va Qidiruv -->
+            <div class="order-menu-topbar">
+              <div class="form-group-inline">
+                <label for="orderSelectTable"><strong>🪑 Stol:</strong></label>
+                <select id="orderSelectTable" class="form-select form-select-lg">
+                  <!-- JS orqali stollar ro'yxati -->
+                </select>
+              </div>
+
+              <div class="form-group-inline">
+                <label for="orderSelectCustomer"><strong>👤 Mijoz:</strong></label>
+                <select id="orderSelectCustomer" class="form-select">
+                  <option value="">Oddiy mijoz (biriktirilmagan)</option>
+                  <!-- JS orqali mijozlar -->
+                </select>
+              </div>
+
+              <div class="menu-search-box">
+                <span class="search-icon">🔍</span>
+                <input type="text" id="inputMenuSearch" class="form-input" placeholder="Taom nomi yoki narxini qidirish...">
+                <button class="search-clear-btn" id="btnSearchClear" style="display:none;">&times;</button>
+              </div>
+            </div>
+
+            <!-- Kategoriyalar Tablari (8 ta kategoriya) -->
+            <div class="menu-categories-bar" id="menuCategoriesBar">
+              <!-- JS orqali kategoriyalar tugmalari -->
+            </div>
+
+            <!-- Taomlar Gridi (Rasm, Nomi, Narxi, [+] tugmasi) -->
+            <div class="menu-dishes-grid" id="menuDishesGrid">
+              <!-- JS orqali taom kartochkalari -->
+            </div>
+          </div>
+
+          <!-- O'NG QISM: TANLANGAN MAHSULOTLAR VA CHEKKA YUBORISH -->
+          <div class="order-cart-column">
+            <div class="cart-header">
+              <div>
+                <h3>📝 Joriy Buyurtma</h3>
+                <span class="cart-table-badge" id="cartTableBadge">1-stol</span>
+              </div>
+              <button class="btn btn-text text-danger btn-sm" id="btnCartClearAll" title="Barchasini tozalash">
+                🗑️ Tozalash
+              </button>
+            </div>
+
+            <!-- Tanlangan taomlar ro'yxati -->
+            <div class="cart-items-list" id="cartItemsList">
+              <!-- JS orqali -->
+            </div>
+
+            <!-- Bo'sh savat xabari -->
+            <div class="cart-empty-state" id="cartEmptyState">
+              <span class="empty-icon">🍽️</span>
+              <p>Stol uchun hali taom tanlanmadi</p>
+              <small>Chapdagi menyudan kerakli taom ustiga yoki <strong>[+]</strong> bosing</small>
+            </div>
+
+            <!-- Hisob-kitob qismi -->
+            <div class="cart-summary">
+              <div class="summary-line">
+                <span>Taomlar summasi:</span>
+                <strong id="cartSubtotal">0 so'm</strong>
+              </div>
+              <div class="summary-line service-line">
+                <label class="checkbox-label">
+                  <input type="checkbox" id="chkCartServiceCharge" checked>
+                  <span>Xizmat haqi (<span id="cartServicePercent">10</span>%):</span>
+                </label>
+                <strong id="cartServiceCharge">0 so'm</strong>
+              </div>
+              <div class="summary-divider"></div>
+              <div class="summary-line grand-total-line">
+                <div>
+                  <span class="grand-total-label">JAMI SUMMA:</span>
+                  <small class="grand-total-sub">(Kelib tushadigan)</small>
+                </div>
+                <strong class="grand-total-val" id="cartGrandTotal">0 so'm</strong>
+              </div>
+
+              <!-- Harakat tugmalari -->
+              <div class="cart-action-buttons">
+                <!-- 1. Oshxonaga buyurtma yuborish -->
+                <button class="btn btn-warning btn-lg btn-block" id="btnSendOrderToKitchen">
+                  <span>👨‍🍳 OSHXONAGA YUBORISH</span>
+                </button>
+                
+                <div class="cart-subactions-row">
+                  <button class="btn btn-secondary btn-block" id="btnSaveOrderDraft">
+                    💾 Saqlab qo'yish
+                  </button>
+                  <button class="btn btn-success btn-block" id="btnCartProceedToPay">
+                    💵 Kassa / To'lov
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 4. OSHXONA (KDS) ================= -->
+      <section class="view-pane" id="viewKitchen">
+        <div class="view-header">
+          <div>
+            <h2>👨‍🍳 Oshxona Buyurtmalar Paneli (KDS)</h2>
+            <p>Buyurtmalarni qabul qiling, tayyorlang va ofitsiantlarga yetkazing</p>
+          </div>
+          <div class="kitchen-header-badges">
+            <span class="badge badge-orange" id="kdsBadgeActive">0 ta faol buyurtma</span>
+            <button class="btn btn-outline btn-sm" id="btnRefreshKitchen">🔄 Yangilash</button>
+          </div>
+        </div>
+
+        <!-- 4 ta holat ustunlari (Workflow: Yangi -> Tayyorlanmoqda -> Tayyor -> Berildi) -->
+        <div class="kitchen-board-columns">
+          
+          <!-- 1. Yangi buyurtmalar -->
+          <div class="kds-column col-new">
+            <div class="kds-col-header">
+              <div class="kds-col-title">
+                <span class="status-dot dot-yellow"></span>
+                <strong>Yangi Buyurtmalar</strong>
+              </div>
+              <span class="kds-count" id="kdsCountNew">0</span>
+            </div>
+            <div class="kds-col-cards" id="kdsCardsNew">
+              <!-- JS orqali -->
+            </div>
+          </div>
+
+          <!-- 2. Tayyorlanmoqda -->
+          <div class="kds-column col-prep">
+            <div class="kds-col-header">
+              <div class="kds-col-title">
+                <span class="status-dot dot-orange"></span>
+                <strong>Tayyorlanmoqda</strong>
+              </div>
+              <span class="kds-count" id="kdsCountPrep">0</span>
+            </div>
+            <div class="kds-col-cards" id="kdsCardsPrep">
+              <!-- JS orqali -->
+            </div>
+          </div>
+
+          <!-- 3. Tayyor (Olib ketishga tayyor) -->
+          <div class="kds-column col-ready">
+            <div class="kds-col-header">
+              <div class="kds-col-title">
+                <span class="status-dot dot-green"></span>
+                <strong>Tayyor (Ofitsiantga)</strong>
+              </div>
+              <span class="kds-count" id="kdsCountReady">0</span>
+            </div>
+            <div class="kds-col-cards" id="kdsCardsReady">
+              <!-- JS orqali -->
+            </div>
+          </div>
+
+          <!-- 4. Berildi (Mijozga yetkazildi) -->
+          <div class="kds-column col-served">
+            <div class="kds-col-header">
+              <div class="kds-col-title">
+                <span class="status-dot dot-gray"></span>
+                <strong>Berildi (Mijozda)</strong>
+              </div>
+              <span class="kds-count" id="kdsCountServed">0</span>
+            </div>
+            <div class="kds-col-cards" id="kdsCardsServed">
+              <!-- JS orqali -->
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ================= 5. KASSA ================= -->
+      <section class="view-pane" id="viewCashier">
+        <div class="view-header">
+          <div>
+            <h2>💵 Kassa va To'lovlar</h2>
+            <p>Ochiq buyurtmalarni tanlang, to'lovni qabul qiling va rasmiy chek chiqaring</p>
+          </div>
+          <div class="header-cash-summary">
+            <span>Bugungi kassa: <strong class="text-green" id="cashierTotalToday">0 so'm</strong></span>
+          </div>
+        </div>
+
+        <div class="cashier-workspace-grid">
+          
+          <!-- Chap tomon: Ochiq hisob kutayotgan buyurtmalar ro'yxati -->
+          <div class="panel-box cashier-orders-list-box">
+            <div class="panel-box-header">
+              <h3>To'lovga Tayyor Buyurtmalar</h3>
+              <span class="badge badge-purple" id="cashierWaitingOrdersCount">0 ta stol</span>
+            </div>
+            
+            <div class="cashier-orders-container" id="cashierOrdersList">
+              <!-- JS orqali -->
+            </div>
+          </div>
+
+          <!-- O'ng tomon: Tanlangan buyurtma to'lov paneli -->
+          <div class="panel-box cashier-payment-panel">
+            <div class="panel-box-header">
+              <h3>To'lovni Qabul Qilish</h3>
+              <span class="selected-table-tag" id="paySelectedTableTag">Stol tanlanmagan</span>
+            </div>
+
+            <div id="cashierPayContentEmpty" class="cart-empty-state">
+              <span class="empty-icon">🧾</span>
+              <p>Chap tarafdan to'lov qilmoqchi bo'lgan stolni tanlang</p>
+            </div>
+
+            <div id="cashierPayContentActive" style="display:none;" class="cashier-pay-content">
+              <!-- Buyurtma ma'lumotlari -->
+              <div class="pay-order-meta">
+                <div>
+                  <strong id="payOrderNumber">Buyurtma #---</strong>
+                  <span class="text-muted" id="payOrderTime">Vaqt: --:--</span>
+                </div>
+                <div>
+                  <span class="text-muted">Ofitsiant:</span>
+                  <strong id="payOrderWaiter">Ali</strong>
+                </div>
+              </div>
+
+              <!-- Buyurtmadagi taomlar qisqacha ro'yxati -->
+              <div class="pay-dishes-table-wrap">
+                <table class="receipt-mini-table">
+                  <thead>
+                    <tr>
+                      <th>Taom</th>
+                      <th style="text-align:center;">Soni</th>
+                      <th style="text-align:right;">Narxi</th>
+                      <th style="text-align:right;">Jami</th>
+                    </tr>
+                  </thead>
+                  <tbody id="payOrderItemsBody">
+                    <!-- JS orqali -->
+                  </tbody>
+                </table>
+              </div>
+
+              <!-- To'lov usullari: Naqd, Karta, Click, Payme -->
+              <div class="payment-methods-selector">
+                <label class="pay-method-radio">
+                  <input type="radio" name="payMethod" value="Naqd" checked>
+                  <span class="pay-method-btn">💵 Naqd</span>
+                </label>
+                <label class="pay-method-radio">
+                  <input type="radio" name="payMethod" value="Karta">
+                  <span class="pay-method-btn">💳 Karta (Uzcard/Humo)</span>
+                </label>
+                <label class="pay-method-radio">
+                  <input type="radio" name="payMethod" value="Click">
+                  <span class="pay-method-btn">📱 Click</span>
+                </label>
+                <label class="pay-method-radio">
+                  <input type="radio" name="payMethod" value="Payme">
+                  <span class="pay-method-btn">🟢 Payme</span>
+                </label>
+              </div>
+
+              <!-- Naqd pul kalkulyatori (Qaytim) -->
+              <div class="cash-calc-wrapper" id="cashCalcWrapper">
+                <div class="form-row">
+                  <div class="form-group">
+                    <label>Berilgan pul (so'm):</label>
+                    <input type="number" id="inputCashReceived" class="form-input form-input-lg" placeholder="Masalan: 200000" step="1000">
+                  </div>
+                  <div class="form-group">
+                    <label>Qaytim:</label>
+                    <div class="change-display text-green" id="textCashChange">0 so'm</div>
+                  </div>
+                </div>
+                <div class="quick-cash-row">
+                  <button class="btn btn-outline btn-xs btn-quick-cash" data-amount="exact">Aniq summa</button>
+                  <button class="btn btn-outline btn-xs btn-quick-cash" data-amount="50000">50 000</button>
+                  <button class="btn btn-outline btn-xs btn-quick-cash" data-amount="100000">100 000</button>
+                  <button class="btn btn-outline btn-xs btn-quick-cash" data-amount="200000">200 000</button>
+                </div>
+              </div>
+
+              <!-- Jami to'lov -->
+              <div class="pay-final-summary">
+                <div class="fin-row">
+                  <span>Taomlar summasi:</span>
+                  <strong id="paySubtotal">0 so'm</strong>
+                </div>
+                <div class="fin-row">
+                  <span>Xizmat haqi:</span>
+                  <strong id="payServiceCharge">0 so'm</strong>
+                </div>
+                <div class="fin-row total-highlight">
+                  <span>JAMI TO'LOV:</span>
+                  <strong class="text-green text-xl" id="payGrandTotal">0 so'm</strong>
+                </div>
+              </div>
+
+              <!-- To'lovni tasdiqlash tugmasi -->
+              <button class="btn btn-success btn-xl btn-block" id="btnExecutePayment">
+                ✅ TO'LOVNI QABUL QILISH VA CHEK CHIQARISH
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ================= 6. MENU (TAOMLAR BOSHQARUVI) ================= -->
+      <section class="view-pane" id="viewMenu">
+        <div class="view-header">
+          <div>
+            <h2>📋 Taomlar Menyusi</h2>
+            <p>Taomlarni qo'shish, narxlarini o'zgartirish, tahrirlash va mavjudligini boshqarish</p>
+          </div>
+          <div class="view-header-actions">
+            <button class="btn btn-primary" id="btnOpenAddProductModal">➕ Yangi Taom Qo'shish</button>
+          </div>
+        </div>
+
+        <!-- Menu filtrlari va qidiruv -->
+        <div class="menu-admin-filters">
+          <div class="search-box">
+            <input type="text" id="inputAdminMenuSearch" class="form-input" placeholder="Taom nomi bo'yicha qidirish...">
+          </div>
+          <div class="category-filter-select">
+            <select id="selectAdminMenuCategory" class="form-select">
+              <option value="all">Barcha kategoriyalar</option>
+              <!-- JS orqali -->
+            </select>
+          </div>
+          <div class="availability-filter-select">
+            <select id="selectAdminMenuStatus" class="form-select">
+              <option value="all">Barcha holatlar</option>
+              <option value="available">Faqat Mavjud</option>
+              <option value="unavailable">Mavjud emas</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Taomlar jadvali / gridi -->
+        <div class="panel-box">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 50px;">Rasm</th>
+                  <th>Taom Nomi</th>
+                  <th>Kategoriya</th>
+                  <th>Narxi</th>
+                  <th>Holati</th>
+                  <th style="width: 140px; text-align: center;">Amallar</th>
+                </tr>
+              </thead>
+              <tbody id="menuAdminTableBody">
+                <!-- JS orqali -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 7. KATEGORIYALAR ================= -->
+      <section class="view-pane" id="viewCategories">
+        <div class="view-header">
+          <div>
+            <h2>📂 Taom Kategoriyalari</h2>
+            <p>Menyu toifalarini qo'shish va tartibga solish</p>
+          </div>
+          <div class="view-header-actions">
+            <button class="btn btn-primary" id="btnOpenAddCategoryModal">➕ Yangi Kategoriya</button>
+          </div>
+        </div>
+
+        <div class="panel-box">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th style="width: 60px;">Belgi</th>
+                  <th>Kategoriya Nomi</th>
+                  <th>Kod / ID</th>
+                  <th>Taomlar soni</th>
+                  <th style="width: 120px; text-align: center;">Amallar</th>
+                </tr>
+              </thead>
+              <tbody id="categoriesTableBody">
+                <!-- JS orqali -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 8. MIJOZLAR ================= -->
+      <section class="view-pane" id="viewCustomers">
+        <div class="view-header">
+          <div>
+            <h2>👥 Mijozlar Boshqaruvi</h2>
+            <p>Mijozlar ro'yxati, ularning buyurtmalari soni va umumiy xarajatlari</p>
+          </div>
+          <div class="view-header-actions">
+            <button class="btn btn-primary" id="btnOpenAddCustomerModal">➕ Yangi Mijoz</button>
+          </div>
+        </div>
+
+        <div class="panel-box">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Mijoz Ismi</th>
+                  <th>Telefon Raqami</th>
+                  <th>Buyurtmalar Soni</th>
+                  <th>Umumiy Xarajat</th>
+                  <th>Oxirgi Buyurtma</th>
+                  <th style="width: 100px; text-align: center;">Amal</th>
+                </tr>
+              </thead>
+              <tbody id="customersTableBody">
+                <!-- JS orqali -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 9. XODIMLAR ================= -->
+      <section class="view-pane" id="viewStaff">
+        <div class="view-header">
+          <div>
+            <h2>👔 Xodimlar va Rollar</h2>
+            <p>Admin, Kassir, Ofitsiant va Oshpaz huquqlarini boshqarish</p>
+          </div>
+          <div class="view-header-actions">
+            <button class="btn btn-primary" id="btnOpenAddStaffModal">➕ Yangi Xodim Qo'shish</button>
+          </div>
+        </div>
+
+        <!-- Rollar huquqlari haqida eslatma -->
+        <div class="roles-permission-cards">
+          <div class="role-card role-admin">
+            <div class="role-badge">👑 Admin</div>
+            <p>To'liq ruxsat: Barcha sahifalar, sozlamalar, hisobotlar, xodimlar va kassani nazorat qiladi.</p>
+          </div>
+          <div class="role-card role-cashier">
+            <div class="role-badge">💵 Kassir</div>
+            <p>Kassa, to'lovlar qabul qilish, cheklar chiqarish, buyurtmalar tarixi va stollar holati.</p>
+          </div>
+          <div class="role-card role-waiter">
+            <div class="role-badge">🍽️ Ofitsiant</div>
+            <p>Stollar, yangi buyurtmalar olish, taom qo'shish, oshxonaga buyurtma yuborish, mijozlar.</p>
+          </div>
+          <div class="role-card role-chef">
+            <div class="role-badge">👨‍🍳 Oshpaz</div>
+            <p>Oshxona (KDS) buyurtmalarini ko'rish, qabul qilish va holatini "Tayyor" deb belgilash.</p>
+          </div>
+        </div>
+
+        <!-- Xodimlar jadvali -->
+        <div class="panel-box" style="margin-top: 16px;">
+          <div class="panel-box-header">
+            <h3>Mavjud Xodimlar Ro'yxati</h3>
+          </div>
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Ismi</th>
+                  <th>Roli</th>
+                  <th>Telefon</th>
+                  <th>Kirish PIN</th>
+                  <th>Holati</th>
+                  <th style="width: 120px; text-align: center;">Amallar</th>
+                </tr>
+              </thead>
+              <tbody id="staffTableBody">
+                <!-- JS orqali -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 10. HISOBOTLAR ================= -->
+      <section class="view-pane" id="viewReports">
+        <div class="view-header">
+          <div>
+            <h2>📈 Savdo va Moliya Hisobotlari</h2>
+            <p>Kunlik, haftalik, oylik savdo va to'lov turlari bo'yicha hisobotlar</p>
+          </div>
+          <div class="report-date-filters">
+            <button class="btn-filter active" data-period="today">Bugun</button>
+            <button class="btn-filter" data-period="week">Shu Hafta</button>
+            <button class="btn-filter" data-period="month">Shu Oy</button>
+            <button class="btn-filter" data-period="all">Barcha Vaqt</button>
+          </div>
+        </div>
+
+        <!-- Hisobot KPI kartochkalari -->
+        <div class="dashboard-kpi-grid">
+          <div class="kpi-card kpi-sales">
+            <div class="kpi-icon">💰</div>
+            <div class="kpi-info">
+              <span class="kpi-title">Davr Savdosi</span>
+              <strong class="kpi-value text-green" id="repPeriodSales">0 so'm</strong>
+              <small class="kpi-sub">Jami tushum</small>
+            </div>
+          </div>
+          <div class="kpi-card kpi-orders">
+            <div class="kpi-icon">🧾</div>
+            <div class="kpi-info">
+              <span class="kpi-title">Buyurtmalar Soni</span>
+              <strong class="kpi-value" id="repPeriodOrders">0 ta</strong>
+              <small class="kpi-sub">Yopilgan cheklar</small>
+            </div>
+          </div>
+          <div class="kpi-card kpi-kitchen">
+            <div class="kpi-icon">📊</div>
+            <div class="kpi-info">
+              <span class="kpi-title">O'rtacha Chek</span>
+              <strong class="kpi-value text-blue" id="repAverageCheck">0 so'm</strong>
+              <small class="kpi-sub">Bitta buyurtmaga to'g'ri kelgan</small>
+            </div>
+          </div>
+        </div>
+
+        <!-- To'lov turlari diagrammasi va eng ko'p sotilgan taomlar -->
+        <div class="dashboard-bottom-grid">
+          
+          <!-- To'lov turlari ulushi -->
+          <div class="panel-box">
+            <div class="panel-box-header">
+              <h3>💳 To'lov Usullari Bo'yicha Tushum</h3>
+            </div>
+            <div class="payment-methods-breakdown" id="repPaymentBreakdown">
+              <!-- JS orqali barchart va ko'rsatkichlar -->
+            </div>
+          </div>
+
+          <!-- Eng ko'p daromad keltirgan taomlar -->
+          <div class="panel-box">
+            <div class="panel-box-header">
+              <h3>🍲 Eng Ko'p Sotilgan Taomlar (Reyting)</h3>
+            </div>
+            <div class="top-dishes-list" id="repTopDishesList">
+              <!-- JS orqali -->
+            </div>
+          </div>
+
+        </div>
+      </section>
+
+      <!-- ================= 11. BUYURTMALAR TARIXI ================= -->
+      <section class="view-pane" id="viewOrderHistory">
+        <div class="view-header">
+          <div>
+            <h2>📜 Barcha Buyurtmalar Tarixi</h2>
+            <p>Eski buyurtmalar, cheklarni qayta ko'rish va chop etish</p>
+          </div>
+          <div class="history-search-filter">
+            <input type="text" id="inputHistorySearch" class="form-input" placeholder="Buyurtma №, stol yoki ofitsiant...">
+            <select id="selectHistoryPaymentFilter" class="form-select">
+              <option value="all">Barcha to'lovlar</option>
+              <option value="Naqd">Naqd</option>
+              <option value="Karta">Karta</option>
+              <option value="Click">Click</option>
+              <option value="Payme">Payme</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="panel-box">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Buyurtma №</th>
+                  <th>Sana & Vaqt</th>
+                  <th>Stol</th>
+                  <th>Ofitsiant/Kassir</th>
+                  <th>Taomlar</th>
+                  <th>To'lov Turi</th>
+                  <th>Jami Summa</th>
+                  <th>Holati</th>
+                  <th style="width: 100px; text-align: center;">Chek</th>
+                </tr>
+              </thead>
+              <tbody id="orderHistoryTableBody">
+                <!-- JS orqali -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= 12. SOZLAMALAR ================= -->
+      <section class="view-pane" id="viewSettings">
+        <div class="view-header">
+          <div>
+            <h2>⚙️ Tizim Sozlamalari</h2>
+            <p>Restoran ma'lumotlari, chek yozuvlari, stol soni va valyutani sozlash</p>
+          </div>
+        </div>
+
+        <div class="settings-form-layout">
+          <div class="panel-box settings-box">
+            <div class="panel-box-header">
+              <h3>🏪 Restoran va Kassa Ma'lumotlari</h3>
+            </div>
+            <div class="settings-fields-grid">
+              <div class="form-group">
+                <label for="setRestName">Restoran Nomi:</label>
+                <input type="text" id="setRestName" class="form-input" value="Oshxona & Restoran POS">
+              </div>
+              <div class="form-group">
+                <label for="setRestPhone">Telefon Raqam:</label>
+                <input type="text" id="setRestPhone" class="form-input" value="+998 90 123-45-67">
+              </div>
+              <div class="form-group full-width">
+                <label for="setRestAddress">Manzil:</label>
+                <input type="text" id="setRestAddress" class="form-input" value="Toshkent shahri, Amir Temur ko'chasi, 12-uy">
+              </div>
+              <div class="form-group">
+                <label for="setCurrency">Valyuta:</label>
+                <input type="text" id="setCurrency" class="form-input" value="so'm">
+              </div>
+              <div class="form-group">
+                <label for="setTableCount">Stollar Soni (masalan 16):</label>
+                <input type="number" id="setTableCount" class="form-input" value="16" min="4" max="60">
+              </div>
+              <div class="form-group">
+                <label for="setServiceCharge">Xizmat haqi (%):</label>
+                <input type="number" id="setServiceCharge" class="form-input" value="10" min="0" max="30">
+              </div>
+            </div>
+          </div>
+
+          <div class="panel-box settings-box">
+            <div class="panel-box-header">
+              <h3>🧾 Chek Sozlamalari</h3>
+            </div>
+            <div class="settings-fields-grid">
+              <div class="form-group full-width">
+                <label for="setReceiptHeader">Chek Yuqori Yozuvi (Header):</label>
+                <input type="text" id="setReceiptHeader" class="form-input" value="Oshxona & Milliy Taomlar">
+              </div>
+              <div class="form-group full-width">
+                <label for="setReceiptFooter">Chek Pastki Yozuvi (Footer):</label>
+                <input type="text" id="setReceiptFooter" class="form-input" value="Xaridingiz uchun rahmat, yana keling!">
+              </div>
+            </div>
+
+            <div class="settings-actions-row">
+              <button class="btn btn-primary btn-lg" id="btnSaveSettings">
+                💾 Sozlamalarni Saqlash
+              </button>
+              <button class="btn btn-outline text-danger" id="btnResetDemoData">
+                ⚠️ Namuna Ma'lumotlarni Qayta Tiklash
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ================= MODAL DIALOGLAR ================= -->
+
+  <!-- 1. STOL BUYURTMASI MODALI (Stol bosilganda chiqadi) -->
+  <div class="modal-overlay" id="modalTableDetail">
+    <div class="modal-content modal-md">
+      <div class="modal-header">
+        <div>
+          <h3 id="modalTableDetailTitle">🪑 1-STOL</h3>
+          <span class="badge" id="modalTableDetailStatus">BO'SH</span>
+        </div>
+        <button class="close-modal-btn" onclick="closeModal('modalTableDetail')">&times;</button>
+      </div>
+
+      <div class="modal-body" id="modalTableDetailBody">
+        <!-- JS orqali -->
+      </div>
+
+      <div class="modal-footer" id="modalTableDetailFooter">
+        <!-- JS orqali tugmalar -->
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. STOLNI KO'CHIRISH MODALI (1-stol -> 5-stol) -->
+  <div class="modal-overlay" id="modalTransferTable">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3>🔄 Buyurtmani Boshqa Stolga Ko'chirish</h3>
+        <button class="close-modal-btn" onclick="closeModal('modalTransferTable')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p>Qaysi stoldan ko'chirilsin: <strong id="transferFromTableName">1-stol</strong></p>
+        <div class="form-group" style="margin-top: 12px;">
+          <label for="selectTransferTargetTable">Qaysi bo'sh stolga o'tkazilsin:</label>
+          <select id="selectTransferTargetTable" class="form-select form-select-lg">
+            <!-- JS orqali bo'sh stollar -->
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnConfirmTransferTable">Ko'chirishni Tasdiqlash</button>
+        <button class="btn btn-secondary" onclick="closeModal('modalTransferTable')">Bekor qilish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. CHEK MODALI (PRINT & PDF FORMATI) -->
+  <div class="modal-overlay" id="modalReceipt">
+    <div class="modal-content modal-receipt-content">
+      <div class="modal-header">
+        <h3>🧾 Kassa To'lov Cheki</h3>
+        <button class="close-modal-btn" onclick="closeModal('modalReceipt')">&times;</button>
+      </div>
+      <div class="modal-body receipt-modal-body">
+        <div class="receipt-paper" id="printableReceipt">
+          <!-- JS orqali haqiqiy chek HTML -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary btn-lg" id="btnPrintReceipt">🖨️ Chop Etish (Print)</button>
+        <button class="btn btn-secondary" onclick="closeModal('modalReceipt')">Yopish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. TAOM QO'SHISH / TAHRIRLASH MODALI -->
+  <div class="modal-overlay" id="modalProduct">
+    <div class="modal-content modal-md">
+      <div class="modal-header">
+        <h3 id="modalProductTitle">➕ Yangi Taom Qo'shish</h3>
+        <button class="close-modal-btn" onclick="closeModal('modalProduct')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="formProduct" onsubmit="return false;">
+          <input type="hidden" id="prodEditId">
+          <div class="form-group">
+            <label for="prodName">Taom Nomi: *</label>
+            <input type="text" id="prodName" class="form-input" placeholder="Masalan: Osh (Palov)" required>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="prodCategory">Kategoriya: *</label>
+              <select id="prodCategory" class="form-select" required>
+                <!-- JS orqali -->
+              </select>
+            </div>
+            <div class="form-group">
+              <label for="prodPrice">Narxi (so'm): *</label>
+              <input type="number" id="prodPrice" class="form-input" placeholder="35000" min="500" step="500" required>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label for="prodIcon">Belgi / Emoji: *</label>
+              <input type="text" id="prodIcon" class="form-input" placeholder="Masalan: 🍲 yoki 🥩" value="🍲">
+            </div>
+            <div class="form-group">
+              <label for="prodStatus">Holati:</label>
+              <select id="prodStatus" class="form-select">
+                <option value="available">Mavjud (Available)</option>
+                <option value="unavailable">Mavjud emas</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="prodDescription">Tavsifi (Ixtiyoriy):</label>
+            <input type="text" id="prodDescription" class="form-input" placeholder="Masalan: Maxsus ziravorlar va sariq sabzili">
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnSaveProduct">Saqlash</button>
+        <button class="btn btn-secondary" onclick="closeModal('modalProduct')">Bekor qilish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. KATEGORIYA QO'SHISH / TAHRIRLASH MODALI -->
+  <div class="modal-overlay" id="modalCategory">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3 id="modalCategoryTitle">➕ Yangi Kategoriya</h3>
+        <button class="close-modal-btn" onclick="closeModal('modalCategory')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="catEditId">
+        <div class="form-group">
+          <label for="catName">Kategoriya Nomi: *</label>
+          <input type="text" id="catName" class="form-input" placeholder="Masalan: Taomlar" required>
+        </div>
+        <div class="form-group">
+          <label for="catIcon">Belgi / Emoji:</label>
+          <input type="text" id="catIcon" class="form-input" placeholder="🍲" value="📂">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnSaveCategory">Saqlash</button>
+        <button class="btn btn-secondary" onclick="closeModal('modalCategory')">Bekor qilish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. MIJOZ QO'SHISH / TAHRIRLASH MODALI -->
+  <div class="modal-overlay" id="modalCustomer">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3 id="modalCustomerTitle">➕ Yangi Mijoz</h3>
+        <button class="close-modal-btn" onclick="closeModal('modalCustomer')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="custEditId">
+        <div class="form-group">
+          <label for="custName">Ismi: *</label>
+          <input type="text" id="custName" class="form-input" placeholder="Akmal Karimov" required>
+        </div>
+        <div class="form-group">
+          <label for="custPhone">Telefon Raqami: *</label>
+          <input type="text" id="custPhone" class="form-input" placeholder="+998 90 123-45-67" required>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnSaveCustomer">Saqlash</button>
+        <button class="btn btn-secondary" onclick="closeModal('modalCustomer')">Bekor qilish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 7. XODIM QO'SHISH / TAHRIRLASH MODALI -->
+  <div class="modal-overlay" id="modalStaff">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3 id="modalStaffTitle">➕ Yangi Xodim</h3>
+        <button class="close-modal-btn" onclick="closeModal('modalStaff')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="staffEditId">
+        <div class="form-group">
+          <label for="staffName">Xodim Ismi: *</label>
+          <input type="text" id="staffName" class="form-input" placeholder="Otabek Rasulov" required>
+        </div>
+        <div class="form-group">
+          <label for="staffRole">Roli: *</label>
+          <select id="staffRole" class="form-select" required>
+            <option value="waiter">Ofitsiant</option>
+            <option value="cashier">Kassir</option>
+            <option value="chef">Oshpaz</option>
+            <option value="admin">Administrator</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="staffPin">Kirish PIN kodi: *</label>
+          <input type="text" id="staffPin" class="form-input" placeholder="Masalan: 3333" maxlength="6" required>
+        </div>
+        <div class="form-group">
+          <label for="staffPhone">Telefon:</label>
+          <input type="text" id="staffPhone" class="form-input" placeholder="+998 90 111-22-33">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnSaveStaff">Saqlash</button>
+        <button class="btn btn-secondary" onclick="closeModal('modalStaff')">Bekor qilish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 8. XODIM VA ROLNI ALMASHTIRISH (SWITCH ROLE) MODALI -->
+  <div class="modal-overlay" id="modalRoleSwitch">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3>👤 Xodim va Rolni Tanlash</h3>
+        <button class="close-modal-btn" onclick="closeModal('modalRoleSwitch')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted" style="margin-bottom: 12px;">Qaysi xodim sifatida ishlamoqchisiz? Tanlang:</p>
+        <div class="role-switch-list" id="roleSwitchList">
+          <!-- JS orqali xodimlar ro'yxati -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-block" onclick="closeModal('modalRoleSwitch')">Yopish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 9. MAHSULOTGA IZOH YOZISH MODALI -->
+  <div class="modal-overlay" id="modalItemNote">
+    <div class="modal-content modal-sm">
+      <div class="modal-header">
+        <h3>💬 Taomga Izoh / Talab</h3>
+        <button class="close-modal-btn" onclick="closeModal('modalItemNote')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p id="noteDishTitle"><strong>Taom nomi</strong></p>
+        <div class="form-group" style="margin-top: 10px;">
+          <input type="text" id="inputItemNote" class="form-input form-input-lg" placeholder="Masalan: Piyozsiz, achchiq bo'lmasin...">
+        </div>
+        <div class="quick-notes-chips">
+          <span class="chip-note" onclick="setQuickNote('Piyozsiz')">Piyozsiz</span>
+          <span class="chip-note" onclick="setQuickNote('Achchiq bo\'lmasin')">Achchiq bo'lmasin</span>
+          <span class="chip-note" onclick="setQuickNote('Qovurilgan')">Qovurilgan</span>
+          <span class="chip-note" onclick="setQuickNote('Tezroq bo\'lsin')">Tezroq bo'lsin</span>
+          <span class="chip-note" onclick="setQuickNote('Muzsiz')">Muzsiz</span>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnSaveItemNote">Izohni Saqlash</button>
+        <button class="btn btn-secondary" onclick="closeModal('modalItemNote')">Bekor qilish</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ASOSIY SKRIPT -->
+  <script src="app.js"></script>
+</body>
+</html>
