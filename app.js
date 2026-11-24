@@ -1,2495 +1,1388 @@
-/**
- * ===================================================================
- * OSHXONA & RESTORAN POS BOSHQARUV TIZIMI — ASOSIY ISH MANTIQI (app.js)
- * Modulli, tezkor va to'liq avtomatlashtirilgan restoran boshqaruvi
- * ===================================================================
- */
+/* =====================================================================
+   KAFE PRO POS — asosiy mantiq
+   Kassa · Oshxona · Stollar · Menyu · Buyurtmalar · Sozlamalar
+   ===================================================================== */
 
-// 1. STANDART SOZLAMALAR VA BAZAVIY MA'LUMOTLAR
-const DEFAULT_SETTINGS = {
-  restaurantName: "Oshxona & Restoran POS",
-  phone: "+998 90 123-45-67",
-  address: "Toshkent shahri, Amir Temur ko'chasi, 12-uy",
-  currency: "so'm",
-  tableCount: 16,
-  serviceChargePercent: 10,
-  receiptHeader: "Oshxona & Milliy Taomlar",
-  receiptFooter: "Xaridingiz uchun rahmat, yana keling!"
+// ---------------------------------------------------------------------
+// 1. Boshlang'ich ma'lumotlar (umumiy qism shared.js da)
+// ---------------------------------------------------------------------
+const { ROLES, PAY_LABEL } = Shared;
+
+const NAV = [
+  { id: "admin", label: "Admin panel", icon: "chart", roles: ["admin"] },
+  { id: "kassa", label: "Kassa", icon: "cash", roles: ["kassir"] },
+  { id: "kitchen", label: "Oshxona", icon: "chef", roles: ["admin", "oshpaz"] },
+  { id: "halls", label: "Stollar", icon: "seat", roles: ["admin"] },
+  { id: "menu", label: "Menyu", icon: "book", roles: ["admin"] },
+  { id: "orders", label: "Buyurtmalar", icon: "list", roles: ["admin", "kassir"] },
+  { id: "settings", label: "Sozlamalar", icon: "gear", roles: ["admin"] }
+];
+
+// ---------------------------------------------------------------------
+// 2. Yordamchi funksiyalar
+// ---------------------------------------------------------------------
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (n) => Math.round(n || 0).toLocaleString("ru-RU");
+const money = (n) => fmt(n) + " so'm";
+const num = Shared.num;
+const nowIso = () => new Date().toISOString();
+const pad = (n) => String(n).padStart(2, "0");
+const dateStr = (d) => { d = new Date(d); return `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()}`; };
+const tm = (d) => { d = new Date(d); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const dt = (d) => `${dateStr(d)} ${tm(d)}`;
+const mins = (d) => Math.max(0, Math.floor((Date.now() - new Date(d)) / 60000));
+const initials = (name) => String(name).split(/\s+/).map((w) => w[0] || "").join("").slice(0, 2).toUpperCase();
+
+const ICONS = {
+  cash: '<rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10v4M18 10v4"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6h.01M4 12h.01M4 18h.01"/>',
+  chef: '<path d="M6 13.9A4 4 0 0 1 7.4 6a5.1 5.1 0 0 1 9.2 0A4 4 0 0 1 18 13.9V20H6z"/><path d="M6 16.5h12"/>',
+  chart: '<path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/>',
+  clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  box: '<path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/>',
+  book: '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5V21h16"/>',
+  gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
+  bell: '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/>',
+  search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/>',
+  trash: '<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>',
+  edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/>',
+  card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/>',
+  split: '<path d="M16 3h5v5M8 3H3v5M21 3l-7 7M3 3l7 7M12 14v7"/>',
+  check: '<path d="M20 6L9 17l-5-5"/>',
+  print: '<path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  wallet: '<path d="M20 7H5a2 2 0 0 1 0-4h13v4"/><path d="M3 5v14a2 2 0 0 0 2 2h15V7"/><path d="M16 14h.01"/>',
+  grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
+  seat: '<rect x="4" y="8" width="16" height="5" rx="1.5"/><path d="M7 13v7M17 13v7M8 4h8"/>',
+  users: '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>',
+  truck: '<path d="M1 3h15v13H1zM16 8h4l3 3v5h-7"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>',
+  up: '<path d="M12 19V5M5 12l7-7 7 7"/>',
+  down: '<path d="M12 5v14M19 12l-7 7-7-7"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5M12 15V3"/>'
 };
+const icon = (name) => `<svg class="i" viewBox="0 0 24 24">${ICONS[name] || ""}</svg>`;
 
-const DEFAULT_CATEGORIES = [
-  { id: "taomlar", name: "Taomlar", icon: "🍲" },
-  { id: "fastfood", name: "Fast Food", icon: "🍔" },
-  { id: "salatlar", name: "Salatlar", icon: "🥗" },
-  { id: "shorvalar", name: "Sho'rvalar", icon: "🥣" },
-  { id: "kabob", name: "Kabob", icon: "🍢" },
-  { id: "ichimliklar", name: "Ichimliklar", icon: "🥤" },
-  { id: "choykofe", name: "Choy/Kofe", icon: "🫖" },
-  { id: "desertlar", name: "Desertlar", icon: "🍰" }
-];
-
-const DEFAULT_PRODUCTS = [
-  // 1. Taomlar
-  { id: 101, name: "Osh (Palov) 1 por", categoryId: "taomlar", price: 35000, icon: "🍲", isAvailable: true, description: "Maxsus mol go'shtli to'y oshi" },
-  { id: 102, name: "Osh (Palov) 0.7 por", categoryId: "taomlar", price: 28000, icon: "🍲", isAvailable: true, description: "O'rtacha porsiya" },
-  { id: 103, name: "Qozon kabob", categoryId: "taomlar", price: 48000, icon: "🥩", isAvailable: true, description: "Qovurilgan go'sht va qizarib pishgan kartoshka" },
-  { id: 104, name: "Manti (1 dona)", categoryId: "taomlar", price: 7000, icon: "🥟", isAvailable: true, description: "Mol go'shti va piyozli manti" },
-  { id: 105, name: "Jiz-biz (tovada)", categoryId: "taomlar", price: 45000, icon: "🥘", isAvailable: true, description: "Qo'y go'shti tovada qovurilgan" },
-  { id: 106, name: "Qovurma lag'mon", categoryId: "taomlar", price: 35000, icon: "🍝", isAvailable: true, description: "Qo'lda cho'zilgan xamir va go'sht" },
-  { id: 107, name: "Tandir non", categoryId: "taomlar", price: 5000, icon: "🍞", isAvailable: true, description: "Issiq tandir non" },
-  { id: 108, name: "Patir non", categoryId: "taomlar", price: 10000, icon: "🥐", isAvailable: true, description: "Yog'li Samarqand patir" },
-
-  // 2. Fast Food
-  { id: 201, name: "Gamburger", categoryId: "fastfood", price: 28000, icon: "🍔", isAvailable: true, description: "Mol go'shtli kotlet va pishloq" },
-  { id: 202, name: "Chizburger", categoryId: "fastfood", price: 32000, icon: "🍔", isAvailable: true, description: "Qo'shimcha pishloq bilan" },
-  { id: 203, name: "Lavash standart", categoryId: "fastfood", price: 32000, icon: "🌯", isAvailable: true, description: "Mol go'shtli shirali lavash" },
-  { id: 204, name: "Xot-dog", categoryId: "fastfood", price: 18000, icon: "🌭", isAvailable: true, description: "Sosiska va maxsus sous" },
-  { id: 205, name: "Kartoshka fri", categoryId: "fastfood", price: 16000, icon: "🍟", isAvailable: true, description: "Qarsildoq qovurilgan fri" },
-
-  // 3. Salatlar
-  { id: 301, name: "Achichuk (pomidor-piyoz)", categoryId: "salatlar", price: 10000, icon: "🥗", isAvailable: true, description: "Osh uchun yangi achichuk" },
-  { id: 302, name: "Bahor salati", categoryId: "salatlar", price: 12000, icon: "🥗", isAvailable: true, description: "Bodring, ko'katlar va tuxum" },
-  { id: 303, name: "Olivye salati", categoryId: "salatlar", price: 18000, icon: "🥗", isAvailable: true, description: "Klassik go'shtli olivye" },
-  { id: 304, name: "Suzma / Chakka", categoryId: "salatlar", price: 8000, icon: "🥣", isAvailable: true, description: "Ziravorlar bilan suzma" },
-  { id: 305, name: "Fransuzcha salat", categoryId: "salatlar", price: 18000, icon: "🥗", isAvailable: true, description: "Qizil lavlagi va mayonezli" },
-
-  // 4. Sho'rvalar
-  { id: 401, name: "Mol go'shtli Sho'rva", categoryId: "shorvalar", price: 30000, icon: "🥣", isAvailable: true, description: "Katta bo'lak lahm go'shtli sho'rva" },
-  { id: 402, name: "Cho'zma Lag'mon", categoryId: "shorvalar", price: 32000, icon: "🍜", isAvailable: true, description: "Suyuq lag'mon sho'rva" },
-  { id: 403, name: "Chuchvara sho'rva", categoryId: "shorvalar", price: 28000, icon: "🍲", isAvailable: true, description: "Qatiq va mitti chuchvaralar" },
-  { id: 404, name: "Mastava (qatiqli)", categoryId: "shorvalar", price: 26000, icon: "🥣", isAvailable: true, description: "Guruchli suyuq milliy taom" },
-
-  // 5. Kabob
-  { id: 501, name: "Shashlik qiyma", categoryId: "kabob", price: 16000, icon: "🍢", isAvailable: true, description: "Mayin mol go'shtli qiyma sihi" },
-  { id: 502, name: "Shashlik kuskovoy", categoryId: "kabob", price: 20000, icon: "🍢", isAvailable: true, description: "Mol lahm go'shti va dumba" },
-  { id: 503, name: "Shashlik jigar", categoryId: "kabob", price: 16000, icon: "🍢", isAvailable: true, description: "Pardaga o'ralgan yangi jigar" },
-  { id: 504, name: "Tovuq qanot shashlik", categoryId: "kabob", price: 18000, icon: "🍗", isAvailable: true, description: "Ziravorlangan tovuq qanotlari" },
-
-  // 6. Ichimliklar
-  { id: 601, name: "Coca-Cola 1.5 L", categoryId: "ichimliklar", price: 16000, icon: "🥤", isAvailable: true, description: "Salqin gazli ichimlik" },
-  { id: 602, name: "Fanta 1.5 L", categoryId: "ichimliklar", price: 16000, icon: "🥤", isAvailable: true, description: "Apelsinli gazli ichimlik" },
-  { id: 603, name: "Gazsiz suv 0.5 L", categoryId: "ichimliklar", price: 4000, icon: "💧", isAvailable: true, description: "Toza mineral suv" },
-  { id: 604, name: "Dena sharbati 1 L", categoryId: "ichimliklar", price: 15000, icon: "🧃", isAvailable: true, description: "Tabiiy meva sharbati" },
-
-  // 7. Choy / Kofe
-  { id: 701, name: "Ko'k choy (choynak)", categoryId: "choykofe", price: 5000, icon: "🫖", isAvailable: true, description: "Ko'k choy 95-nav" },
-  { id: 702, name: "Qora choy (choynak)", categoryId: "choykofe", price: 5000, icon: "🫖", isAvailable: true, description: "Xushbo'y qora choy" },
-  { id: 703, name: "Limon choy (asal bilan)", categoryId: "choykofe", price: 14000, icon: "🍋", isAvailable: true, description: "Limonli va tabiiy asalli choy" },
-  { id: 704, name: "Kofe Americano", categoryId: "choykofe", price: 15000, icon: "☕", isAvailable: true, description: "Tabiiy qora kofe" },
-
-  // 8. Desertlar
-  { id: 801, name: "Paxlava (1 dona)", categoryId: "desertlar", price: 14000, icon: "🍰", isAvailable: true, description: "Yong'oqli va asalli turkcha paxlava" },
-  { id: 802, name: "Medovik tort", categoryId: "desertlar", price: 20000, icon: "🎂", isAvailable: true, description: "Mayin asalli tort bo'lagi" },
-  { id: 803, name: "Muzqaymoq assorti", categoryId: "desertlar", price: 18000, icon: "🍨", isAvailable: true, description: "Shokoladli va qaymoqli" }
-];
-
-const DEFAULT_STAFF = [
-  { id: 1, name: "Ali Rahimov", role: "admin", pin: "1234", phone: "+998 90 111-22-33", active: true },
-  { id: 2, name: "Kozim Kassir", role: "cashier", pin: "2222", phone: "+998 90 222-33-44", active: true },
-  { id: 3, name: "Otabek Ofitsiant", role: "waiter", pin: "3333", phone: "+998 90 333-44-55", active: true },
-  { id: 4, name: "Sherzod Oshpaz", role: "chef", pin: "4444", phone: "+998 90 444-55-66", active: true }
-];
-
-const DEFAULT_CUSTOMERS = [
-  { id: 1, name: "Akmal Karimov", phone: "+998 90 987-65-43", ordersCount: 5, totalSpent: 620000, lastOrderAt: "2026-11-24T08:30:00Z" },
-  { id: 2, name: "Nodir Bekov", phone: "+998 91 123-99-88", ordersCount: 2, totalSpent: 215000, lastOrderAt: "2026-11-24T09:10:00Z" },
-  { id: 3, name: "Dilshod Saidov", phone: "+998 93 456-78-90", ordersCount: 8, totalSpent: 1140000, lastOrderAt: "2026-11-24T09:40:00Z" }
-];
-
-function generateDefaultTables(count = 16) {
-  const tables = [];
-  for (let i = 1; i <= count; i++) {
-    tables.push({
-      id: i,
-      number: i,
-      name: `${i}-stol`,
-      capacity: 4,
-      status: "vacant", // vacant, occupied, preparing, waiting_bill
-      currentOrderId: null
-    });
-  }
-  return tables;
+function toast(msg, type = "info") {
+  const el = document.createElement("div");
+  el.className = "toast " + type;
+  el.textContent = msg;
+  $("toasts").appendChild(el);
+  setTimeout(() => el.remove(), 3000);
 }
 
-// 2. DASTUR HOLATI (STATE)
-const STATE = {
-  settings: { ...DEFAULT_SETTINGS },
-  categories: [...DEFAULT_CATEGORIES],
-  products: [...DEFAULT_PRODUCTS],
-  tables: generateDefaultTables(16),
-  orders: [], // Barcha buyurtmalar (faol va yopilgan)
-  customers: [...DEFAULT_CUSTOMERS],
-  staff: [...DEFAULT_STAFF],
-  currentUser: DEFAULT_STAFF[0], // Hozirgi foydalanuvchi (Default: Admin)
-
-  // UI Holati
-  currentView: "dashboard",
-  currentOrderCart: {
-    tableId: 1,
-    customerId: null,
-    items: [], // { id, productId, name, price, qty, total, notes }
-    serviceChargeEnabled: true
-  },
-  selectedCashierOrderId: null,
-  activeOrderCategory: "taomlar",
-  currentEditingItemIndex: null, // Note modal uchun
-  filterTableStatus: "all",
-  reportPeriod: "today",
-  sidebarCollapsed: false
-};
-
-// 3. YORDAMCHI FUNKSIYALAR VA FORMATLASH
-function formatMoney(amount) {
-  return Number(amount || 0).toLocaleString("uz-UZ") + " " + (STATE.settings.currency || "so'm");
+function openModal(html, size = "") {
+  $("modalBox").className = "modal-box " + size;
+  $("modalBox").innerHTML = html;
+  $("modal").classList.remove("hidden");
+  const first = $("modalBox").querySelector("input:not([type=file]),select,textarea");
+  if (first) setTimeout(() => first.focus(), 30);
 }
-
-function formatDate(dateInput) {
-  const d = dateInput ? new Date(dateInput) : new Date();
-  const year = d.getFullYear();
-  const month = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  const hours = String(d.getHours()).padStart(2, "0");
-  const minutes = String(d.getMinutes()).padStart(2, "0");
-  return `${day}.${month}.${year} ${hours}:${minutes}`;
+function closeModal() {
+  $("modal").classList.add("hidden");
+  // Yopilgan oynadagi maydonda fokus qolmasin (aks holda Esc va yangilanish ishlamaydi)
+  const a = document.activeElement;
+  if (a && $("modal").contains(a)) a.blur();
 }
+const modalOpen = () => !$("modal").classList.contains("hidden");
 
-function formatTimeOnly(dateInput) {
-  const d = dateInput ? new Date(dateInput) : new Date();
-  const hours = String(d.getHours()).padStart(2, "0");
-  const minutes = String(d.getMinutes()).padStart(2, "0");
-  return `${hours}:${minutes}`;
-}
+// ---------------------------------------------------------------------
+// 3. Server bilan aloqa (barcha ma'lumot serverda — data/kafe.db)
+// ---------------------------------------------------------------------
+const TOKEN_KEY = "kafe_pro_token";
+let S = { rev: 0, settings: { name: "Kafe Pro", printer: Shared.defaultConfig().settings.printer }, staff: [], categories: [], menu: [], halls: [], orders: [], tickets: [] };
+let online = true;
 
-function generateOrderNumber() {
-  const todayCount = STATE.orders.length + 1;
-  return `#${100 + todayCount}`;
-}
+function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function lsSet(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) { /* xotira yopiq */ } }
 
-// 4. MA'LUMOTLARNI SAQLASH VA YUKLASH (LOCALSTORAGE + REST API SYNC)
-const STORAGE_KEY = "pos_restaurant_system_v1";
-
-function loadState() {
+async function api(path, opts = {}) {
+  const token = lsGet(TOKEN_KEY);
+  let r;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      const data = JSON.parse(raw);
-      if (data.settings) STATE.settings = { ...DEFAULT_SETTINGS, ...data.settings };
-      if (data.categories && data.categories.length) STATE.categories = data.categories;
-      if (data.products && data.products.length) STATE.products = data.products;
-      if (data.tables && data.tables.length) STATE.tables = data.tables;
-      if (data.orders) STATE.orders = data.orders;
-      if (data.customers) STATE.customers = data.customers;
-      if (data.staff && data.staff.length) STATE.staff = data.staff;
-      if (data.currentUser) STATE.currentUser = data.currentUser;
-    } else {
-      // Namuna boshlang'ich buyurtmalar kiritamiz
-      seedInitialDemoOrders();
-    }
-  } catch (err) {
-    console.error("Storage yuklashda xatolik:", err);
+    r = await fetch(path, {
+      method: opts.body ? "POST" : "GET",
+      headers: { "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) },
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    });
+  } catch (e) {
+    setOnline(false);
+    throw new Error("Server bilan aloqa yo'q. Server yoqilganini tekshiring.");
   }
+  setOnline(true);
+  const d = await r.json().catch(() => ({}));
+  if (r.status === 401 && path !== "/api/login") { sessionLost(); throw new Error(d.error || "Qayta kiring"); }
+  if (!r.ok) throw new Error(d.error || "Xatolik");
+  return d;
+}
 
-  // Server API mavjud bo'lsa fonda sinxronlash
+function setOnline(v) {
+  if (v === online) return;
+  online = v;
+  toast(v ? "Server bilan aloqa tiklandi" : "Server bilan aloqa yo'q!", v ? "success" : "error");
+}
+
+function applyState(d) {
+  if (!d || d.same) return;
+  S = d;
+  if (d.me) me = d.me;
+}
+
+// Har bir o'zgarish serverga alohida amal bo'lib boradi; javobda yangi holat keladi
+async function act(type, payload) {
   try {
-    fetch('/api/data')
-      .then(res => res.ok ? res.json() : null)
-      .then(serverData => {
-        if (serverData && serverData.orders) {
-          // Serverdan yangilanish
-          console.log("Server API ma'lumotlari muvaffaqiyatli sinxronlandi");
-        }
-      })
-      .catch(() => {});
-  } catch (e) {}
+    const d = await api("/api/action", { body: { type, payload } });
+    applyState(d.state);
+    renderAll();
+    return d.result || {};
+  } catch (e) {
+    toast(e.message, "error");
+    return null;
+  }
 }
 
-function saveState() {
+function isBusy() {
+  const a = document.activeElement;
+  return modalOpen() || (a && ["INPUT", "TEXTAREA", "SELECT"].includes(a.tagName));
+}
+
+// Boshqa qurilmalardagi o'zgarishlarni olish (kassa ↔ oshxona)
+let polling = false;
+async function poll() {
+  if (!me || polling || isBusy()) return;
+  polling = true;
   try {
-    const payload = {
-      settings: STATE.settings,
-      categories: STATE.categories,
-      products: STATE.products,
-      tables: STATE.tables,
-      orders: STATE.orders,
-      customers: STATE.customers,
-      staff: STATE.staff,
-      currentUser: STATE.currentUser
-    };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
-
-    // Serverga fonda yuborish
-    if (window.location.protocol.startsWith('http')) {
-      fetch('/api/data', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      }).catch(() => {});
-    }
-  } catch (err) {
-    console.error("Saqlashda xatolik:", err);
-  }
-
-  // Har safar saqlanganda barcha ko'rsatkichlarni yangilash
-  updateHeaderKPIs();
+    const d = await api("/api/state?rev=" + S.rev);
+    if (!d.same && !isBusy()) { applyState(d); renderAll(); }
+  } catch (e) { /* aloqa yo'q — setOnline xabar beradi */ }
+  polling = false;
 }
 
-function seedInitialDemoOrders() {
-  // 1-stol uchun namuna zakaz
-  const order1 = {
-    id: 101,
-    orderNumber: "#101",
-    tableId: 1,
-    tableName: "1-stol",
-    customerId: 1,
-    customerName: "Akmal Karimov",
-    waiterId: 3,
-    waiterName: "Otabek Ofitsiant",
-    items: [
-      { id: 1, productId: 101, name: "Osh (Palov) 1 por", price: 35000, qty: 2, total: 70000, notes: "Beda tuxum bilan" },
-      { id: 2, productId: 501, name: "Shashlik qiyma", price: 16000, qty: 3, total: 48000, notes: "Piyozli" },
-      { id: 3, productId: 301, name: "Achichuk (pomidor-piyoz)", price: 10000, qty: 1, total: 10000, notes: "" },
-      { id: 4, productId: 701, name: "Ko'k choy (choynak)", price: 5000, qty: 2, total: 10000, notes: "" }
-    ],
-    status: "preparing", // new, preparing, ready, served, completed, cancelled
-    kitchenStatus: "preparing",
-    subtotal: 138000,
-    serviceCharge: 13800,
-    total: 151800,
-    createdAt: new Date(Date.now() - 25 * 60000).toISOString(),
-    paymentMethod: null
+async function load() {
+  try {
+    if (lsGet(TOKEN_KEY)) applyState(await api("/api/state"));
+  } catch (e) { /* token eskirgan — kirish oynasi */ }
+  if (!me) await loadPublic();
+  if (me) view = firstAllowed();
+  renderAll();
+}
+
+async function loadPublic() {
+  try {
+    const d = await api("/api/public");
+    S.settings = { ...S.settings, name: d.name };
+    S.staff = d.staff;
+  } catch (e) { toast(e.message, "error"); }
+}
+
+function sessionLost() {
+  if (!me) return;
+  me = null;
+  lsSet(TOKEN_KEY, null);
+  closeModal();
+  loadPublic().then(renderAll);
+}
+
+// ---------------------------------------------------------------------
+// 4. Kirish / chiqish
+// ---------------------------------------------------------------------
+let me = null;
+let loginPick = null;
+let view = "kassa";
+let shownView = null;
+
+function renderLogin() {
+  $("app").classList.add("hidden");
+  const el = $("login");
+  el.classList.remove("hidden");
+  el.innerHTML = `
+    <div class="login-card">
+      <div class="login-logo">🍽️</div>
+      <h1>${esc(S.settings.name)}</h1>
+      <p class="muted">Tizimga kirish uchun xodimni tanlang va PIN kodni kiriting</p>
+      <div class="login-users">
+        ${S.staff.map((u) => `
+          <button class="login-user ${loginPick === u.id ? "active" : ""}" onclick="pickUser(${u.id})">
+            <span class="avatar">${esc(initials(u.name))}</span>
+            <b>${esc(u.name)}</b><small>${ROLES[u.role] || ""}</small>
+          </button>`).join("")}
+      </div>
+      <input id="pin" type="password" inputmode="numeric" autocomplete="off" placeholder="PIN" onkeydown="if(event.key==='Enter')doLogin()">
+      <div id="loginErr" class="err"></div>
+      <button class="btn primary big" onclick="doLogin()">Kirish</button>
+    </div>`;
+}
+
+function pickUser(id) {
+  loginPick = id;
+  renderLogin();
+  $("pin").focus();
+}
+
+async function doLogin() {
+  if (!loginPick) { $("loginErr").textContent = "Xodimni tanlang"; return; }
+  try {
+    const d = await api("/api/login", { body: { id: loginPick, pin: $("pin").value } });
+    lsSet(TOKEN_KEY, d.token);
+    applyState(await api("/api/state"));
+    me = d.user;
+    view = firstAllowed();
+    shownView = null;
+    renderAll();
+    toast(`Xush kelibsiz, ${d.user.name}!`, "success");
+  } catch (e) {
+    $("loginErr").textContent = e.message;
+    $("pin").value = "";
+    $("pin").focus();
+  }
+}
+
+async function logout() {
+  try { await api("/api/logout", { body: {} }); } catch (e) {}
+  me = null;
+  loginPick = null;
+  selTable = null;
+  lsSet(TOKEN_KEY, null);
+  closeModal();
+  await loadPublic();
+  renderAll();
+}
+
+const can = (v) => !!me && NAV.some((n) => n.id === v && n.roles.includes(me.role));
+const firstAllowed = () => NAV.find((n) => n.roles.includes(me.role)).id;
+
+function go(v) {
+  if (!can(v)) return;
+  view = v;
+  renderAll();
+}
+
+// ---------------------------------------------------------------------
+// 5. Umumiy ko'rinish: sidebar, header, bildirishnomalar
+// ---------------------------------------------------------------------
+
+function renderAll() {
+  if (!me) { shownView = null; renderLogin(); return; }
+  $("login").classList.add("hidden");
+  $("app").classList.remove("hidden");
+  if (!can(view)) view = firstAllowed();
+  if (shownView !== view) { $("content").innerHTML = ""; shownView = view; }
+  renderSidebar();
+  renderHeader();
+  VIEWS[view]();
+}
+
+function renderSidebar() {
+  $("sideBrand").textContent = S.settings.name;
+  $("sideNav").innerHTML = NAV.filter((n) => n.roles.includes(me.role)).map((n) => `
+    <button class="nav ${n.id === view ? "active" : ""}" onclick="go('${n.id}')" title="${n.label}">
+      ${icon(n.icon)}<span>${n.label}</span>
+      ${n.id === "kitchen" && kitchenCount() ? `<em class="pill">${kitchenCount()}</em>` : ""}
+    </button>`).join("");
+  $("sideUser").innerHTML = `
+    <div class="side-user">
+      <span class="avatar">${esc(initials(me.name))}</span>
+      <div><b>${esc(me.name)}</b><small>${ROLES[me.role]}</small></div>
+    </div>
+    <button class="nav logout" onclick="logout()" title="Chiqish">${icon("logout")}<span>Chiqish</span></button>`;
+}
+
+function renderHeader() {
+  const n = NAV.find((x) => x.id === view);
+  $("menuToggle").innerHTML = icon("menu");
+  $("hdrTitle").textContent = n.label;
+  $("hdrSub").textContent = S.settings.name;
+  tickClock();
+}
+
+// Sidebar: foydalanuvchi tanlovi saqlanadi, bo'lmasa kichik ekranda avtomatik yig'iladi
+const SIDEBAR_KEY = "kafe_pro_sidebar";
+function applySidebar() {
+  const pref = lsGet(SIDEBAR_KEY);
+  const mini = pref ? pref === "mini" : window.innerWidth < 1400;
+  document.body.classList.toggle("side-mini", mini);
+}
+function toggleSidebar() {
+  const mini = !document.body.classList.contains("side-mini");
+  lsSet(SIDEBAR_KEY, mini ? "mini" : "full");
+  applySidebar();
+// Oshxona panelida "necha daqiqa o'tdi" yangilanib tursin
+setInterval(() => { if (me && view === "kitchen" && !isBusy()) renderKitchen(); }, 30000);
+}
+window.addEventListener("resize", applySidebar);
+
+function tickClock() {
+  const d = new Date();
+  const days = ["Yakshanba", "Dushanba", "Seshanba", "Chorshanba", "Payshanba", "Juma", "Shanba"];
+  $("hdrTime").textContent = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  $("hdrDate").textContent = `${days[d.getDay()]}, ${dateStr(d)}`;
+}
+
+// ---------------------------------------------------------------------
+// 6. Buyurtma yordamchilari
+// ---------------------------------------------------------------------
+const hallOf = (id) => Shared.hallOf(S, id);
+const placeName = (h, t) => Shared.placeName(S, h, t);
+const activeOrder = (h, t) => S.orders.find((o) => o.hall === h && o.table === t && o.status === "open");
+const curOrder = () => (selTable ? activeOrder(selHall, selTable) : null);
+
+// Jami = taomlar − chegirma + xizmat haqi (hisob shared.js da — server ham xuddi shunday hisoblaydi)
+const calc = (o) => Shared.calc(S, o);
+
+const orderTickets = (o) => S.tickets.filter((k) => k.orderId === o.id);
+const kitchenCount = () => S.tickets.filter((k) => k.status === "new" || k.status === "cooking").length;
+
+// Oshxonadagi holat: yo'q / tayyorlanmoqda / tayyor (olib ketish kerak) / berildi
+function kitchenState(o) {
+  const ts = orderTickets(o);
+  if (ts.some((k) => k.status === "ready")) return "ready";
+  if (ts.some((k) => k.status === "new" || k.status === "cooking")) return "cooking";
+  return ts.length ? "served" : "none";
+}
+
+function tableStatus(h, t) {
+  const o = activeOrder(h, t);
+  if (!o) return "free";
+  const k = kitchenState(o);
+  return k === "cooking" || k === "ready" ? k : "busy";
+}
+const TABLE_LABEL = { free: "Bo'sh", busy: "Band", cooking: "Oshxonada", ready: "Tayyor!" };
+
+function orderStatus(o) {
+  if (o.status === "paid") return ["To'langan", "green"];
+  if (o.status === "cancelled") return ["Bekor qilingan", "red"];
+  if (o.status === "refunded") return ["Qaytarilgan", "red"];
+  return { none: ["Ochiq", "blue"], cooking: ["Oshxonada", "orange"], ready: ["Tayyor", "purple"], served: ["Berildi", "blue"] }[kitchenState(o)];
+}
+
+// ---------------------------------------------------------------------
+// 7. KASSA
+// ---------------------------------------------------------------------
+let selHall = null;
+let selTable = null;
+let selCat = "all";
+let menuSearch = "";
+let lastAdded = null;
+let pay = newPay();
+function newPay() { return { method: "naqd", given: "", card: "", cash: "" }; }
+
+function renderKassa() {
+  if (!S.halls.some((h) => h.id === selHall)) selHall = (S.halls.find((h) => h.count > 0) || S.halls[0] || {}).id || null;
+  if (selTable && selTable > hallOf(selHall).count) selTable = null;
+  const mode = selTable ? "order" : "tables";
+  const root = $("kassaRoot");
+  if (!root || root.dataset.mode !== mode) {
+    $("content").innerHTML = mode === "tables" ? `
+      <div id="kassaRoot" data-mode="tables">
+        <div id="kHalls" class="hall-tabs"></div>
+        <div class="page-head">
+          <div><h2 id="kHallTitle">Stollar</h2><p class="muted">Buyurtma olish uchun stolni tanlang</p></div>
+          <div class="tstats" id="kTblStats"></div>
+        </div>
+        <div id="kTables" class="tables-page"></div>
+      </div>` : `
+      <div class="kassa order-mode" id="kassaRoot" data-mode="order">
+        <div class="order-top">
+          <button class="btn back-btn" onclick="backToTables()">← Stollar</button>
+          <h2 id="kTitle"></h2>
+          <span class="kbd-hint">Esc — stollarga qaytish</span>
+        </div>
+        <section class="panel menu-panel">
+          <div class="search">${icon("search")}<input id="kSearch" placeholder="Taom qidirish..." oninput="menuSearch=this.value;renderKassaMenu()"></div>
+          <div id="kCats" class="cats"></div>
+          <div id="kMenu" class="prod-grid"></div>
+        </section>
+        <section class="panel order-panel" id="kOrder"></section>
+        <section class="panel pay-bar" id="kPay"></section>
+      </div>`;
+    if ($("kSearch")) $("kSearch").value = menuSearch;
+  }
+  if (mode === "tables") { renderKassaTables(); return; }
+  $("kTitle").textContent = placeName(selHall, selTable);
+  renderKassaMenu();
+  renderOrderPanel();
+  renderPayBar();
+}
+
+function renderKassaTables() {
+  const openIn = (h) => S.orders.filter((o) => o.status === "open" && o.hall === h).length;
+  $("kHalls").innerHTML = S.halls.map((h) => `
+    <button class="hall-tab ${h.id === selHall ? "active" : ""}" onclick="selHall='${h.id}';renderKassa()">
+      ${icon("seat")}<span><b>${esc(h.name)}</b><small>${h.count} ta stol${h.service ? ` · ${h.service}% xizmat` : ""}</small></span>
+      ${openIn(h.id) ? `<em>${openIn(h.id)}</em>` : ""}
+    </button>`).join("") || `<div class="muted">Joy yo'q — "Stollar" bo'limida zal qo'shing</div>`;
+  const hall = hallOf(selHall);
+  $("kHallTitle").textContent = selHall ? hall.name : "Stollar";
+  const counts = { free: 0, busy: 0, cooking: 0, ready: 0 };
+  let html = "";
+  for (let t = 1; t <= hall.count; t++) {
+    const st = tableStatus(selHall, t);
+    const o = activeOrder(selHall, t);
+    counts[st]++;
+    const qty = o ? o.items.reduce((s, i) => s + i.qty, 0) : 0;
+    html += `<button class="tcard ${st}" onclick="selectTable(${t})">
+      <span class="tcard-top"><span class="tcard-no">${t}</span><span class="tcard-st">${TABLE_LABEL[st]}</span></span>
+      ${o ? `<span class="tcard-sum">${money(calc(o).total)}</span>
+             <span class="tcard-meta">${qty} ta taom · ${mins(o.createdAt)} daq · ${esc(o.createdBy || "")}</span>`
+          : `<span class="tcard-meta">Stol bo'sh</span>`}
+    </button>`;
+  }
+  $("kTables").innerHTML = html || `<div class="empty-state"><b>Bu joyda stol yo'q</b><span>"Stollar" bo'limida stollar sonini kiriting</span></div>`;
+  $("kTblStats").innerHTML = `
+    <span class="tstat free"><i></i>Bo'sh <b>${counts.free}</b></span>
+    <span class="tstat busy"><i></i>Band <b>${counts.busy}</b></span>
+    <span class="tstat order"><i></i>Oshxonada <b>${counts.cooking}</b></span>
+    <span class="tstat ready"><i></i>Tayyor <b>${counts.ready}</b></span>`;
+}
+
+function backToTables() {
+  selTable = null;
+  pay = newPay();
+  renderKassa();
+}
+
+function selectTable(t) {
+  if (selTable !== t) { selCat = "all"; menuSearch = ""; if ($("kSearch")) $("kSearch").value = ""; }
+  selTable = t;
+  pay = newPay();
+  renderKassa();
+}
+
+function renderKassaMenu() {
+  // Menyu faqat stol tanlangandan keyin ochiladi
+  $("kSearch").parentElement.classList.toggle("hidden", !selTable);
+  if (!selTable) {
+    $("kCats").innerHTML = "";
+    $("kMenu").innerHTML = `<div class="empty-state menu-closed">${icon("book")}<b>Menyu yopiq</b><span>Menyuni ochish uchun stolni tanlang</span></div>`;
+    return;
+  }
+  const q = menuSearch.trim().toLowerCase();
+  const count = (cid) => S.menu.filter((m) => cid === "all" || m.catId === cid).length;
+  if (selCat !== "all" && !S.categories.some((c) => c.id === selCat)) selCat = "all";
+  $("kCats").innerHTML = [{ id: "all", name: "Barchasi" }, ...S.categories].map((c) =>
+    `<button class="cat ${c.id === selCat ? "active" : ""}" onclick="selCat='${c.id}';renderKassaMenu()">${esc(c.name)}<em>${count(c.id)}</em></button>`).join("");
+
+  const o = curOrder();
+  const list = S.menu.filter((m) => (selCat === "all" || m.catId === selCat) && (!q || m.name.toLowerCase().includes(q)));
+  $("kMenu").innerHTML = list.map((p) => {
+    const inOrder = o ? o.items.filter((i) => i.pid === p.id).reduce((s, i) => s + i.qty, 0) : 0;
+    const off = !p.available;
+    return `<button class="prod ${off ? "off" : ""} ${p.id === lastAdded ? "added" : ""}" onclick="addProduct(${p.id})" ${off ? `disabled title="Mavjud emas"` : ""}>
+      <div class="prod-body"><b>${esc(p.name)}</b><span>${money(p.price)}</span></div>
+      ${inOrder ? `<em class="prod-qty">${inOrder}</em>` : ""}
+    </button>`;
+  }).join("") || `<div class="empty-state small"><span>Taom topilmadi</span></div>`;
+}
+
+async function addProduct(pid) {
+  if (!selTable) { toast("Avval stolni tanlang", "warn"); return; }
+  const p = S.menu.find((m) => m.id === pid);
+  if (!p || !p.available) return;
+  lastAdded = pid;
+  await act("order.add", { hall: selHall, table: selTable, pid });
+  lastAdded = null;
+}
+
+function changeQty(idx, d) {
+  const o = curOrder();
+  const it = o && o.items[idx];
+  if (!it) return;
+  if (it.qty + d < it.sent && !confirm(`"${it.name}" oshxonaga yuborilgan. Baribir kamaytirilsinmi?`)) return;
+  act("order.qty", { orderId: o.id, idx, pid: it.pid, delta: d });
+}
+
+function removeItem(idx) {
+  const o = curOrder();
+  const it = o && o.items[idx];
+  if (!it) return;
+  if (it.sent && !confirm(`"${it.name}" oshxonaga yuborilgan. Buyurtmadan o'chirilsinmi?`)) return;
+  act("order.remove", { orderId: o.id, idx, pid: it.pid });
+}
+
+function setNote(v) {
+  const o = curOrder();
+  if (o && o.note !== v.trim()) act("order.note", { orderId: o.id, note: v });
+}
+
+function setDiscount(p) {
+  const o = curOrder();
+  if (o) act("order.discount", { orderId: o.id, discount: Math.round(num(p)) });
+}
+
+function renderOrderPanel() {
+  const el = $("kOrder");
+  if (!selTable) {
+    el.innerHTML = `<div class="empty-state">${icon("cash")}<b>Stol tanlanmagan</b><span>Buyurtma boshlash uchun stolni tanlang</span></div>`;
+    return;
+  }
+  const o = curOrder();
+  const st = o ? orderStatus(o) : ["Yangi", "gray"];
+  const items = o ? o.items : [];
+  const c = o ? calc(o) : { sub: 0, disc: 0, svc: 0, svcPct: hallOf(selHall).service || 0, total: 0 };
+  const unsent = items.some((i) => i.qty > i.sent);
+  const dis = o ? "" : "disabled";
+  el.innerHTML = `
+    <div class="order-head">
+      <div><h3>Buyurtma</h3><span class="muted">${o ? `#${o.no} · ${tm(o.createdAt)} da ochilgan` : "Yangi buyurtma"}</span></div>
+      <span class="badge ${st[1]}">${st[0]}</span>
+    </div>
+    <div class="order-items">
+      ${items.length ? items.map((i, idx) => `
+        <div class="oi">
+          <div class="oi-info"><b title="${esc(i.name)}">${esc(i.name)}</b>
+            <span>${money(i.price)}${i.sent ? ` · <em class="sent">🍳 ${i.sent} yuborilgan</em>` : ""}</span></div>
+          <div class="qty"><button onclick="changeQty(${idx},-1)">−</button><b>${i.qty}</b><button onclick="changeQty(${idx},1)">+</button></div>
+          <div class="oi-sum">${fmt(i.price * i.qty)}</div>
+          <button class="icon-btn" title="O'chirish" onclick="removeItem(${idx})">${icon("trash")}</button>
+        </div>`).join("") : `<div class="empty-state small"><span>Menyudan taom tanlang</span></div>`}
+    </div>
+    <div class="order-foot">
+      <textarea rows="2" placeholder="Buyurtma izohi (masalan: achchiq bo'lmasin)" onchange="setNote(this.value)" ${dis}>${esc(o ? o.note : "")}</textarea>
+      <div class="disc-row"><span>Chegirma</span>
+        <div class="disc-btns">
+          ${[0, 5, 10, 15].map((p) => `<button class="chip-btn ${o && o.discount === p ? "active" : ""}" onclick="setDiscount(${p})" ${dis}>${p}%</button>`).join("")}
+          <input type="number" min="0" max="100" value="${o ? o.discount : 0}" onchange="setDiscount(this.value)" ${dis}>%
+        </div>
+      </div>
+      <div class="sum-row"><span>Oraliq summa</span><span>${money(c.sub)}</span></div>
+      <div class="sum-row"><span>Chegirma</span><span class="red-t">− ${money(c.disc)}</span></div>
+      ${c.svcPct ? `<div class="sum-row"><span>Xizmat haqi (${c.svcPct}%)</span><span>+ ${money(c.svc)}</span></div>` : ""}
+      <div class="sum-row total"><span>Jami</span><span>${money(c.total)}</span></div>
+      <button class="btn primary big" onclick="sendToKitchen()" ${unsent ? "" : "disabled"}>${icon("chef")} Oshxonaga yuborish</button>
+    </div>`;
+}
+
+// Oshxonaga yuborish: Oshxona paneliga chipta tushadi (printer yoqilgan bo'lsa chek ham chiqadi)
+async function sendToKitchen() {
+  const o = curOrder();
+  if (!o) return;
+  const r = await act("order.kitchen", { orderId: o.id });
+  if (!r) return;
+  if (S.settings.printer.kitchenPrint) printHtml(kitchenTicketHtml(r.ticket), { ...S.settings.printer, copies: 1 });
+  toast(`${placeName(o.hall, o.table)} oshxonaga yuborildi`, "success");
+}
+
+// --- To'lov ---
+const payNums = (total) => Shared.payNums(pay.method, total, pay.given, pay.card, pay.cash);
+
+function renderPayBar() {
+  const o = curOrder();
+  const total = o ? calc(o).total : 0;
+  // Buyurtma yo'q bo'lsa — to'lov paneli bo'sh, chalg'itmaydi
+  if (!o || !o.items.length) {
+    $("kPay").innerHTML = `<div class="pay-empty">${icon("cash")}<span>${selTable ? "Menyudan taom qo'shing — to'lov shu yerda chiqadi" : "To'lov uchun stol va taom tanlang"}</span></div>`;
+    return;
+  }
+  const enter = `onkeydown="if(event.key==='Enter')confirmPayment()"`;
+  const inputs = {
+    naqd: `<label>Mijoz bergan pul<input id="pGiven" inputmode="numeric" placeholder="0" value="${esc(pay.given)}" oninput="pay.given=this.value;updatePayNums()" ${enter}></label>
+      <div class="quick">${[["Aniq", total], ["50 000", 50000], ["100 000", 100000], ["200 000", 200000]].map(([l, v]) =>
+        `<button class="chip-btn" onclick="pay.given='${v}';renderPayBar()">${l}</button>`).join("")}</div>`,
+    karta: `<div class="muted pay-note">${icon("card")} Terminal orqali <b>${money(total)}</b> o'tkazing va to'lovni tasdiqlang.</div>`,
+    aralash: `<label>Karta orqali<input id="pCard" inputmode="numeric" placeholder="0" value="${esc(pay.card)}" oninput="pay.card=this.value;updatePayNums()" ${enter}></label>
+      <label>Naqd pul<input id="pCash" inputmode="numeric" placeholder="0" value="${esc(pay.cash)}" oninput="pay.cash=this.value;updatePayNums()" ${enter}></label>
+      <button class="chip-btn" onclick="fillMixed()">Qolganini naqd</button>`
   };
-
-  // 5-stol uchun hisob kutayotgan zakaz
-  const order2 = {
-    id: 102,
-    orderNumber: "#102",
-    tableId: 5,
-    tableName: "5-stol",
-    customerId: null,
-    customerName: "Mijoz",
-    waiterId: 3,
-    waiterName: "Otabek Ofitsiant",
-    items: [
-      { id: 5, productId: 103, name: "Qozon kabob", price: 48000, qty: 2, total: 96000, notes: "" },
-      { id: 6, productId: 302, name: "Bahor salati", price: 12000, qty: 2, total: 24000, notes: "" },
-      { id: 7, productId: 601, name: "Coca-Cola 1.5 L", price: 16000, qty: 1, total: 16000, notes: "" }
-    ],
-    status: "served",
-    kitchenStatus: "served",
-    subtotal: 136000,
-    serviceCharge: 13600,
-    total: 149600,
-    createdAt: new Date(Date.now() - 45 * 60000).toISOString(),
-    paymentMethod: null
-  };
-
-  // Bugun yopilgan bitta chek
-  const order3 = {
-    id: 100,
-    orderNumber: "#100",
-    tableId: 3,
-    tableName: "3-stol",
-    customerId: 2,
-    customerName: "Nodir Bekov",
-    waiterId: 3,
-    waiterName: "Otabek Ofitsiant",
-    cashierName: "Kozim Kassir",
-    items: [
-      { id: 8, productId: 101, name: "Osh (Palov) 1 por", price: 35000, qty: 3, total: 105000, notes: "" },
-      { id: 9, productId: 703, name: "Limon choy (asal bilan)", price: 14000, qty: 1, total: 14000, notes: "" }
-    ],
-    status: "completed",
-    kitchenStatus: "served",
-    subtotal: 119000,
-    serviceCharge: 11900,
-    total: 130900,
-    paymentMethod: "Naqd",
-    createdAt: new Date(Date.now() - 120 * 60000).toISOString(),
-    completedAt: new Date(Date.now() - 60 * 60000).toISOString()
-  };
-
-  STATE.orders = [order1, order2, order3];
-  
-  // Stollarni belgilash
-  const t1 = STATE.tables.find(t => t.id === 1);
-  if (t1) { t1.status = "preparing"; t1.currentOrderId = order1.id; }
-  
-  const t5 = STATE.tables.find(t => t.id === 5);
-  if (t5) { t5.status = "waiting_bill"; t5.currentOrderId = order2.id; }
+  $("kPay").innerHTML = `
+    <div class="pay-methods">
+      ${[["naqd", "Naqd pul", "cash"], ["karta", "Karta", "card"], ["aralash", "Aralash", "split"]].map(([k, l, ic]) =>
+        `<button class="pm ${pay.method === k ? "active" : ""}" onclick="pay.method='${k}';renderPayBar()">${icon(ic)}<span>${l}</span></button>`).join("")}
+    </div>
+    <div class="pay-inputs">${inputs[pay.method]}</div>
+    <div class="pay-sums">
+      <div><span>To'lanadigan</span><b>${money(total)}</b></div>
+      <div><span>Berilgan</span><b id="pPaid"></b></div>
+      <div><span id="pChangeLbl">Qaytim</span><b id="pChange"></b></div>
+    </div>
+    <button class="btn green pay-btn" onclick="confirmPayment()" title="Enter">${icon("check")} To'lovni tasdiqlash</button>`;
+  updatePayNums();
 }
 
-// 5. NAVIGATSIYA VA EKRANLARNI ALMASHTIRISH
-function navigateTo(viewName) {
-  // Rol huquqini tekshirish
-  const role = STATE.currentUser?.role || "admin";
-  if (role === "chef" && !["kitchen", "dashboard"].includes(viewName)) {
-    alert("Oshpaz faqat Oshxona va Dashboard sahifalariga kirishi mumkin!");
-    viewName = "kitchen";
-  }
-
-  STATE.currentView = viewName;
-
-  // Sidebar tugmalari faolligini yangilash
-  const navBtns = document.querySelectorAll(".sidebar-nav .nav-item");
-  navBtns.forEach(btn => {
-    if (btn.getAttribute("data-view") === viewName) {
-      btn.classList.add("active");
-    } else {
-      btn.classList.remove("active");
-    }
-  });
-
-  // Ekranni almashtirish
-  const panes = document.querySelectorAll(".view-pane");
-  panes.forEach(pane => pane.classList.remove("active"));
-
-  const targetPane = document.getElementById("view" + capitalize(viewName));
-  if (targetPane) targetPane.classList.add("active");
-
-  // Har bir sahifaga mos render qilish
-  switch (viewName) {
-    case "dashboard":
-      renderDashboard();
-      break;
-    case "tables":
-      renderTablesView();
-      break;
-    case "orders":
-      renderOrdersView();
-      break;
-    case "kitchen":
-      renderKitchenView();
-      break;
-    case "cashier":
-      renderCashierView();
-      break;
-    case "menu":
-      renderAdminMenuView();
-      break;
-    case "categories":
-      renderCategoriesView();
-      break;
-    case "customers":
-      renderCustomersView();
-      break;
-    case "staff":
-      renderStaffView();
-      break;
-    case "reports":
-      renderReportsView();
-      break;
-    case "history":
-      renderHistoryView();
-      break;
-    case "settings":
-      renderSettingsView();
-      break;
-  }
-
-  // Mobil rejimda saydbarni yopish
-  if (window.innerWidth < 992) {
-    toggleSidebar(true);
-  }
+function updatePayNums() {
+  const o = curOrder();
+  const total = o ? calc(o).total : 0;
+  const n = payNums(total);
+  $("pPaid").textContent = money(n.paid);
+  const short = n.change < 0;
+  $("pChangeLbl").textContent = short ? "Yetmaydi" : "Qaytim";
+  $("pChange").textContent = money(Math.abs(n.change));
+  $("pChange").className = short ? "red-t" : "green-t";
 }
 
-function capitalize(str) {
-  if (!str) return "";
-  if (str === "orderHistory") return "OrderHistory";
-  return str.charAt(0).toUpperCase() + str.slice(1);
+function fillMixed() {
+  const o = curOrder();
+  if (!o) return;
+  pay.cash = String(Math.max(0, calc(o).total - num(pay.card)));
+  renderPayBar();
 }
 
-// Saydbarni ochish/yopish
-function toggleSidebar(forceCollapse) {
-  const sidebar = document.getElementById("posSidebar");
-  const overlay = document.getElementById("sidebarOverlay");
-  const layout = document.getElementById("posAppLayout");
-  if (!sidebar) return;
-
-  if (typeof forceCollapse === "boolean") {
-    STATE.sidebarCollapsed = forceCollapse;
-  } else {
-    STATE.sidebarCollapsed = !STATE.sidebarCollapsed;
-  }
-
-  if (STATE.sidebarCollapsed) {
-    sidebar.classList.add("collapsed");
-    layout?.classList.add("sidebar-collapsed");
-    if (overlay) overlay.style.display = "none";
-  } else {
-    sidebar.classList.remove("collapsed");
-    layout?.classList.remove("sidebar-collapsed");
-    if (overlay && window.innerWidth < 992) overlay.style.display = "block";
-  }
-}
-
-// 6. YUQORI ASOSIY PANEL KO'RSATKICHLARI (HEADER KPIS)
-function updateHeaderKPIs() {
-  // Bugungi savdo (to'langan cheklar)
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todayPaidOrders = STATE.orders.filter(o => o.status === "completed" && o.completedAt && o.completedAt.startsWith(todayStr));
-  const todaySales = todayPaidOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-
-  // Faol buyurtmalar (yopilmagan)
-  const activeOrders = STATE.orders.filter(o => ["new", "preparing", "ready", "served"].includes(o.status));
-
-  // Oshxona (new va preparing)
-  const kitchenOrders = STATE.orders.filter(o => ["new", "preparing"].includes(o.kitchenStatus));
-
-  // Band stollar
-  const occupiedTables = STATE.tables.filter(t => t.status !== "vacant");
-
-  // DOM yangilash
-  const elSales = document.getElementById("headStatSales");
-  if (elSales) elSales.textContent = formatMoney(todaySales);
-
-  const elActive = document.getElementById("headStatActiveOrders");
-  if (elActive) elActive.textContent = `${activeOrders.length} ta`;
-
-  const elKitchen = document.getElementById("headStatKitchen");
-  if (elKitchen) elKitchen.textContent = `${kitchenOrders.length} ta`;
-
-  const elTables = document.getElementById("headStatTables");
-  if (elTables) elTables.textContent = `${occupiedTables.length} / ${STATE.tables.length}`;
-
-  // Saydbar badgelari
-  const navTables = document.getElementById("navBadgeTables");
-  if (navTables) navTables.textContent = occupiedTables.length;
-
-  const navOrders = document.getElementById("navBadgeActiveOrders");
-  if (navOrders) navOrders.textContent = activeOrders.length;
-
-  const navKitchen = document.getElementById("navBadgeKitchen");
-  if (navKitchen) navKitchen.textContent = kitchenOrders.length;
-
-  const waitingCashier = STATE.orders.filter(o => ["ready", "served"].includes(o.status));
-  const navCashier = document.getElementById("navBadgeCashier");
-  if (navCashier) navCashier.textContent = waitingCashier.length;
-
-  // Joriy foydalanuvchi ma'lumotlari
-  const headName = document.getElementById("headUserName");
-  const headRole = document.getElementById("headUserRole");
-  const headAvatar = document.getElementById("headUserAvatar");
-  const sideInfo = document.getElementById("sideUserInfoText");
-
-  if (STATE.currentUser) {
-    if (headName) headName.textContent = STATE.currentUser.name;
-    if (headRole) headRole.textContent = getRoleDisplayName(STATE.currentUser.role);
-    if (headAvatar) headAvatar.textContent = getRoleAvatar(STATE.currentUser.role);
-    if (sideInfo) sideInfo.textContent = `${STATE.currentUser.name} (${getRoleDisplayName(STATE.currentUser.role)})`;
-  }
-}
-
-function getRoleDisplayName(role) {
-  switch (role) {
-    case "admin": return "Administrator";
-    case "cashier": return "Kassir";
-    case "waiter": return "Ofitsiant";
-    case "chef": return "Bosh Oshpaz";
-    default: return role;
-  }
-}
-
-function getRoleAvatar(role) {
-  switch (role) {
-    case "admin": return "👑";
-    case "cashier": return "💵";
-    case "waiter": return "🍽️";
-    case "chef": return "👨‍🍳";
-    default: return "👤";
-  }
-}
-
-// ================= 7. SAHIFA: 1. DASHBOARD =================
-function renderDashboard() {
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todayOrders = STATE.orders.filter(o => o.createdAt && o.createdAt.startsWith(todayStr));
-  const todayPaid = todayOrders.filter(o => o.status === "completed");
-  const todaySales = todayPaid.reduce((sum, o) => sum + (o.total || 0), 0);
-
-  const kitchenActive = STATE.orders.filter(o => ["new", "preparing"].includes(o.kitchenStatus));
-  const occupiedTables = STATE.tables.filter(t => t.status !== "vacant");
-  const waitingBill = STATE.tables.filter(t => t.status === "waiting_bill");
-  const vacantTables = STATE.tables.filter(t => t.status === "vacant");
-
-  // KPI kartalari
-  document.getElementById("dashTodaySales").textContent = formatMoney(todaySales);
-  document.getElementById("dashTodayOrdersCount").textContent = `${todayOrders.length} ta`;
-  document.getElementById("dashClosedOrdersCount").textContent = `${todayPaid.length} ta to'langan`;
-  document.getElementById("dashKitchenActiveCount").textContent = `${kitchenActive.length} ta`;
-  document.getElementById("dashOccupiedTablesCount").textContent = `${occupiedTables.length} ta`;
-  document.getElementById("dashWaitingBillCount").textContent = `${waitingBill.length} ta hisob kutmoqda`;
-  document.getElementById("dashVacantTablesCount").textContent = `${vacantTables.length} ta`;
-  document.getElementById("dashTotalTablesSub").textContent = `Jami ${STATE.tables.length} ta stol`;
-
-  // Oxirgi buyurtmalar ro'yxati
-  const tbody = document.getElementById("dashRecentOrdersBody");
-  if (tbody) {
-    tbody.innerHTML = "";
-    const recent = [...STATE.orders].reverse().slice(0, 7);
-
-    if (recent.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="7" class="text-center text-muted">Hozircha buyurtmalar yo'q</td></tr>`;
-    } else {
-      recent.forEach(order => {
-        const tr = document.createElement("tr");
-        const itemsSummary = order.items.map(it => `${it.name} (x${it.qty})`).join(", ");
-        tr.innerHTML = `
-          <td><strong>${order.orderNumber}</strong></td>
-          <td><span class="badge badge-table">${order.tableName}</span></td>
-          <td><small>${formatTimeOnly(order.createdAt)}</small></td>
-          <td><div class="table-dishes-cell" title="${itemsSummary}">${itemsSummary}</div></td>
-          <td><strong>${formatMoney(order.total)}</strong></td>
-          <td><span class="status-chip status-${order.status}">${getOrderStatusLabel(order.status)}</span></td>
-          <td>
-            <button class="btn btn-outline btn-xs" onclick="openOrderFromDashboard(${order.id})">Ko'rish</button>
-          </td>
-        `;
-        tbody.appendChild(tr);
-      });
-    }
-  }
-
-  // Eng ko'p sotilgan taomlar
-  renderTopDishes("dashTopDishesList");
-}
-
-function getOrderStatusLabel(status) {
-  switch (status) {
-    case "new": return "Yangi";
-    case "preparing": return "Tayyorlanmoqda";
-    case "ready": return "Tayyor";
-    case "served": return "Berildi";
-    case "completed": return "To'langan";
-    case "cancelled": return "Bekor qilingan";
-    default: return status;
-  }
-}
-
-function renderTopDishes(containerId) {
-  const container = document.getElementById(containerId);
-  if (!container) return;
-
-  // Taomlar sonini hisoblash
-  const counts = {};
-  STATE.orders.forEach(order => {
-    if (order.status !== "cancelled") {
-      order.items.forEach(it => {
-        if (!counts[it.productId]) {
-          counts[it.productId] = { id: it.productId, name: it.name, count: 0, total: 0 };
-        }
-        counts[it.productId].count += it.qty;
-        counts[it.productId].total += it.total;
-      });
-    }
-  });
-
-  const sorted = Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 5);
-
-  if (sorted.length === 0) {
-    container.innerHTML = `<p class="text-muted text-center" style="padding: 20px;">Hozircha sotuvlar ma'lumotlari mavjud emas</p>`;
+let paying = false;
+async function confirmPayment() {
+  const o = curOrder();
+  if (!o || !o.items.length || paying) return;
+  const c = calc(o);
+  const n = payNums(c.total);
+  if (!n.ok) {
+    toast(pay.method === "aralash" && n.card > c.total ? "Karta summasi jami summadan oshmasligi kerak" : "To'lov summasi yetarli emas", "error");
     return;
   }
-
-  container.innerHTML = "";
-  sorted.forEach((dish, idx) => {
-    const row = document.createElement("div");
-    row.className = "top-dish-item";
-    row.innerHTML = `
-      <div class="dish-rank rank-${idx + 1}">${idx + 1}</div>
-      <div class="top-dish-info">
-        <strong>${dish.name}</strong>
-        <small>${dish.count} ta porsiya sotilgan</small>
-      </div>
-      <div class="top-dish-sum text-green">
-        ${formatMoney(dish.total)}
-      </div>
-    `;
-    container.appendChild(row);
-  });
+  paying = true; // ikki marta bosilsa ikki marta to'lanmasin
+  const r = await act("order.pay", { orderId: o.id, method: pay.method, given: pay.given, card: pay.card, cash: pay.cash });
+  paying = false;
+  if (!r) return;
+  selTable = null;
+  pay = newPay();
+  renderAll();
+  showReceipt(r.orderId, true);
+  if (S.settings.printer.autoPrint) setTimeout(() => printReceipt(r.orderId), 300);
 }
 
-function openOrderFromDashboard(orderId) {
-  const order = STATE.orders.find(o => o.id === orderId);
-  if (!order) return;
-
-  if (order.status === "completed") {
-    // Chekni ko'rsatish
-    showReceiptModal(order);
-  } else {
-    // Kassa yoki buyurtma oynasiga o'tish
-    openTableDetailModal(order.tableId);
-  }
+// --- Chek ---
+function receiptHtml(o, cfg = S.settings.printer, info = S.settings) {
+  const c = calc(o);
+  const p = o.payment;
+  return `<div class="rc">
+    <div class="rc-c"><b class="rc-name">${esc(info.name)}</b>
+      ${cfg.header ? `<div>${esc(cfg.header)}</div>` : ""}
+      ${cfg.showAddress && info.address ? `<div>${esc(info.address)}</div>` : ""}
+      ${cfg.showPhone && info.phone ? `<div>${esc(info.phone)}</div>` : ""}</div>
+    <hr>
+    <div class="rc-l"><span>Buyurtma</span><span>#${o.no}</span></div>
+    <div class="rc-l"><span>Joy</span><span>${esc(placeName(o.hall, o.table))}</span></div>
+    <div class="rc-l"><span>Sana</span><span>${dt(o.paidAt || o.createdAt)}</span></div>
+    ${cfg.showCashier && o.cashierName ? `<div class="rc-l"><span>Kassir</span><span>${esc(o.cashierName)}</span></div>` : ""}
+    <hr>
+    ${o.items.map((i) => `<div class="rc-item"><div>${esc(i.name)}</div><div class="rc-l"><span>${i.qty} × ${fmt(i.price)}</span><span>${fmt(i.qty * i.price)}</span></div></div>`).join("")}
+    <hr>
+    <div class="rc-l"><span>Oraliq summa</span><span>${fmt(c.sub)}</span></div>
+    ${c.disc ? `<div class="rc-l"><span>Chegirma (${o.discount}%)</span><span>−${fmt(c.disc)}</span></div>` : ""}
+    ${c.svc ? `<div class="rc-l"><span>Xizmat haqi (${c.svcPct}%)</span><span>+${fmt(c.svc)}</span></div>` : ""}
+    <div class="rc-l rc-total"><span>JAMI</span><span>${money(c.total)}</span></div>
+    ${p ? `
+      <div class="rc-l"><span>To'lov turi</span><span>${PAY_LABEL[p.method]}</span></div>
+      ${p.method === "aralash" ? `<div class="rc-l"><span>· Karta</span><span>${fmt(p.card)}</span></div><div class="rc-l"><span>· Naqd</span><span>${fmt(p.given - p.card)}</span></div>` : ""}
+      ${p.method !== "karta" ? `<div class="rc-l"><span>Berildi</span><span>${fmt(p.given)}</span></div><div class="rc-l"><span>Qaytim</span><span>${fmt(p.change)}</span></div>` : ""}` : `<div class="rc-c">— TO'LANMAGAN —</div>`}
+    <hr>
+    <div class="rc-c">${esc(info.receiptFooter)}</div>
+  </div>`;
 }
 
-// ================= 8. SAHIFA: 2. STOLLAR =================
-function renderTablesView() {
-  const grid = document.getElementById("posTablesGrid");
-  if (!grid) return;
-  grid.innerHTML = "";
-
-  // Hisob-kitoblar
-  let countVacant = 0;
-  let countOccupied = 0;
-  let countPreparing = 0;
-  let countWaiting = 0;
-
-  STATE.tables.forEach(table => {
-    if (table.status === "vacant") countVacant++;
-    else if (table.status === "occupied") countOccupied++;
-    else if (table.status === "preparing") countPreparing++;
-    else if (table.status === "waiting_bill") countWaiting++;
-  });
-
-  // Filter hisoblagichlari
-  document.getElementById("countAllTables").textContent = STATE.tables.length;
-  document.getElementById("countVacantTables").textContent = countVacant;
-  document.getElementById("countOccupiedTables").textContent = countOccupied;
-  document.getElementById("countPreparingTables").textContent = countPreparing;
-  document.getElementById("countWaitingTables").textContent = countWaiting;
-
-  // Filtrlash
-  const filtered = STATE.filterTableStatus === "all"
-    ? STATE.tables
-    : STATE.tables.filter(t => t.status === STATE.filterTableStatus);
-
-  filtered.forEach(table => {
-    const card = document.createElement("div");
-    card.className = `pos-table-card table-${table.status}`;
-
-    // Agar stol band bo'lsa, joriy zakaz ma'lumotlarini olamiz
-    const activeOrder = STATE.orders.find(o => o.id === table.currentOrderId && o.status !== "completed");
-    
-    let orderInfoHTML = "";
-    if (activeOrder) {
-      const itemsCount = activeOrder.items.reduce((s, it) => s + it.qty, 0);
-      orderInfoHTML = `
-        <div class="table-card-order-info">
-          <div class="order-info-line">
-            <span>Buyurtma:</span>
-            <strong>${activeOrder.orderNumber}</strong>
-          </div>
-          <div class="order-info-line">
-            <span>Taomlar:</span>
-            <strong>${itemsCount} ta</strong>
-          </div>
-          <div class="order-info-line total-line">
-            <span>Jami:</span>
-            <strong class="text-green">${formatMoney(activeOrder.total)}</strong>
-          </div>
-          <div class="table-card-time">⏰ ${formatTimeOnly(activeOrder.createdAt)} (${activeOrder.waiterName || "Ofitsiant"})</div>
-        </div>
-      `;
-    } else {
-      orderInfoHTML = `
-        <div class="table-card-vacant-hint">
-          <span>🟢 Stol bo'sh</span>
-          <small>Buyurtma olish uchun bosing</small>
-        </div>
-      `;
-    }
-
-    card.innerHTML = `
-      <div class="table-card-top">
-        <span class="table-number-label">${table.name}</span>
-        <span class="table-status-pill pill-${table.status}">${getTableStatusLabel(table.status)}</span>
-      </div>
-      ${orderInfoHTML}
-      <div class="table-card-bottom-actions">
-        <button class="btn btn-sm btn-block ${table.status === 'vacant' ? 'btn-primary' : 'btn-secondary'}">
-          ${table.status === 'vacant' ? '➕ Yangi Buyurtma' : '👁️ Buyurtmani Ko\'rish'}
-        </button>
-      </div>
-    `;
-
-    card.onclick = () => onTableCardClick(table);
-    grid.appendChild(card);
-  });
+// Oshxona uchun qisqa chek (narxsiz)
+function kitchenTicketHtml(k) {
+  return `<div class="rc">
+    <div class="rc-c"><b class="rc-name">OSHXONA</b></div><hr>
+    <div class="rc-l rc-total"><span>${esc(placeName(k.hall, k.table))}</span><span>#${k.orderNo}</span></div>
+    <div class="rc-l"><span>Vaqt</span><span>${dt(k.createdAt)}</span></div><hr>
+    ${k.items.map((i) => `<div class="rc-l rc-kitchen"><span>${esc(i.name)}</span><b>× ${i.qty}</b></div>`).join("")}
+    ${k.note ? `<hr><div>Izoh: ${esc(k.note)}</div>` : ""}
+  </div>`;
 }
 
-function getTableStatusLabel(status) {
-  switch (status) {
-    case "vacant": return "Bo'sh";
-    case "occupied": return "Band";
-    case "preparing": return "Tayyorlanmoqda";
-    case "waiting_bill": return "Hisob kutmoqda";
-    default: return status;
-  }
+// Printerga yuborish: qog'oz kengligi, shrift va nusxa soni sozlamalardan olinadi
+function printHtml(html, cfg = S.settings.printer) {
+  const w = cfg.paper === "58" ? 48 : 72;
+  $("printStyle").textContent = `@media print {
+    @page { size: ${cfg.paper}mm auto; margin: ${cfg.paper === "58" ? 2 : 3}mm; }
+    .print-area { width: ${w}mm; font-size: ${cfg.fontSize}px; }
+  }`;
+  const copies = Math.min(5, Math.max(1, cfg.copies || 1));
+  $("printArea").innerHTML = Array.from({ length: copies }, () => `<div class="print-copy">${html}</div>`).join("");
+  window.print();
 }
 
-function onTableCardClick(table) {
-  if (table.status === "vacant") {
-    // To'g'ridan-to'g'ri yangi buyurtma olishga o'tamiz
-    startNewOrderForTable(table.id);
-  } else {
-    // Mavjud buyurtma tafsilotlari modalini ochamiz
-    openTableDetailModal(table.id);
-  }
+function showReceipt(id, success) {
+  const o = findOrder(id);
+  if (!o) return;
+  openModal(`
+    ${success ? `<div class="success-banner">${icon("check")}<div><b>To'lov muvaffaqiyatli qabul qilindi</b>
+      <span>${money(o.total)} · ${PAY_LABEL[o.payment.method]}${o.payment.change > 0 ? ` · Qaytim: ${money(o.payment.change)}` : ""}</span></div></div>`
+      : `<div class="modal-title"><h2>Buyurtma #${o.no}</h2><span class="badge ${orderStatus(o)[1]}">${orderStatus(o)[0]}</span></div>`}
+    <div class="receipt-paper">${receiptHtml(o)}</div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal();go(firstAllowed())">Bosh sahifa</button>
+      <button class="btn primary" onclick="printReceipt(${o.id})">${icon("print")} Chek chiqarish</button>
+    </div>`, "sm");
 }
 
-// ================= 9. SAHIFA: 3. BUYURTMALAR (ZAKAZ YARATISH VA TAHRIRLASH) =================
-function renderOrdersView() {
-  // 1. Stollar dropdownini to'ldirish
-  const select = document.getElementById("orderSelectTable");
-  if (select) {
-    select.innerHTML = "";
-    STATE.tables.forEach(t => {
-      const opt = document.createElement("option");
-      opt.value = t.id;
-      const occText = t.status !== "vacant" ? ` (${getTableStatusLabel(t.status)})` : " (Bo'sh)";
-      opt.textContent = `${t.name}${occText}`;
-      if (t.id === STATE.currentOrderCart.tableId) opt.selected = true;
-      select.appendChild(opt);
-    });
-  }
-
-  // 2. Mijozlar dropdownini to'ldirish
-  const custSelect = document.getElementById("orderSelectCustomer");
-  if (custSelect) {
-    custSelect.innerHTML = `<option value="">Oddiy mijoz (biriktirilmagan)</option>`;
-    STATE.customers.forEach(c => {
-      const opt = document.createElement("option");
-      opt.value = c.id;
-      opt.textContent = `${c.name} (${c.phone})`;
-      if (c.id === STATE.currentOrderCart.customerId) opt.selected = true;
-      custSelect.appendChild(opt);
-    });
-  }
-
-  // 3. Kategoriyalar barini render qilish
-  renderOrderCategoriesBar();
-
-  // 4. Taomlar gridini render qilish
-  renderOrderDishesGrid();
-
-  // 5. Savatchani render qilish
-  renderOrderCart();
+function printReceipt(id) {
+  const o = findOrder(id);
+  if (!o) return;
+  printHtml(receiptHtml(o));
 }
 
-function renderOrderCategoriesBar() {
-  const bar = document.getElementById("menuCategoriesBar");
-  if (!bar) return;
-  bar.innerHTML = "";
+// ---------------------------------------------------------------------
+// 8. Sana filtri (Buyurtmalar sahifasi uchun)
+// ---------------------------------------------------------------------
+const ymd = (d) => { d = new Date(d); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
+const todayYmd = () => ymd(new Date());
+const F = { ord: { from: todayYmd(), to: todayYmd() }, adm: { from: todayYmd(), to: todayYmd() } };
 
-  // Barcha taomlar
-  const allBtn = document.createElement("button");
-  allBtn.className = `cat-btn ${STATE.activeOrderCategory === 'all' ? 'active' : ''}`;
-  allBtn.innerHTML = `<span>🍽️ Barchasi</span>`;
-  allBtn.onclick = () => {
-    STATE.activeOrderCategory = "all";
-    renderOrderCategoriesBar();
-    renderOrderDishesGrid();
-  };
-  bar.appendChild(allBtn);
+// Ochiq va oxirgi 2 kun buyurtmalari doim yuklangan; eskiroq sanalar serverdan olinadi
+const hist = { key: "", rev: -1, orders: [], loading: "" };
+function ordersFor(f, rerender) {
+  if (f.from && f.from >= ymd(Date.now() - 864e5)) return S.orders;
+  const key = f.from + "|" + f.to;
+  if ((hist.key !== key || hist.rev !== S.rev) && hist.loading !== key + "@" + S.rev) {
+    const rev = S.rev;
+    hist.loading = key + "@" + rev;
+    api(`/api/orders?from=${encodeURIComponent(f.from)}&to=${encodeURIComponent(f.to)}`)
+      .then((d) => { Object.assign(hist, { key, rev, orders: d.orders, loading: "" }); if (!isBusy() && rerender) rerender(); })
+      .catch((e) => { hist.loading = ""; toast(e.message, "error"); });
+  }
+  if (hist.key !== key) return S.orders; // yuklanguncha hozirgilar ko'rinadi
+  const m = new Map(hist.orders.map((o) => [o.id, o]));
+  S.orders.forEach((o) => m.set(o.id, o)); // hozirgi holat yangiroq
+  return [...m.values()];
+}
+const findOrder = (id) => S.orders.find((o) => o.id === id) || hist.orders.find((o) => o.id === id);
+const inRange = (d, f) => { if (!d) return false; const k = ymd(d); return (!f.from || k >= f.from) && (!f.to || k <= f.to); };
+const rangeLabel = (f) => !f.from && !f.to ? "Barcha vaqt" : f.from === f.to ? dateStr(f.from) : `${f.from ? dateStr(f.from) : "…"} — ${f.to ? dateStr(f.to) : "…"}`;
 
-  STATE.categories.forEach(cat => {
-    const btn = document.createElement("button");
-    btn.className = `cat-btn ${STATE.activeOrderCategory === cat.id ? 'active' : ''}`;
-    btn.innerHTML = `<span>${cat.icon} ${cat.name}</span>`;
-    btn.onclick = () => {
-      STATE.activeOrderCategory = cat.id;
-      renderOrderCategoriesBar();
-      renderOrderDishesGrid();
-    };
-    bar.appendChild(btn);
-  });
+function dateBar(key, fn) {
+  const f = F[key];
+  const t = todayYmd(), y = ymd(Date.now() - 864e5), w = ymd(Date.now() - 6 * 864e5), m = ymd(Date.now() - 29 * 864e5);
+  const quick = [["Bugun", t, t], ["Kecha", y, y], ["7 kun", w, t], ["30 kun", m, t], ["Hammasi", "", ""]];
+  return `<div class="date-bar">
+    ${quick.map(([l, a, b]) => `<button class="chip-btn ${f.from === a && f.to === b ? "active" : ""}" onclick="F.${key}={from:'${a}',to:'${b}'};${fn}()">${l}</button>`).join("")}
+    <span class="date-range">
+      <input type="date" value="${f.from}" onchange="F.${key}.from=this.value;${fn}()" title="Boshlanish sanasi">
+      <span class="muted">—</span>
+      <input type="date" value="${f.to}" onchange="F.${key}.to=this.value;${fn}()" title="Tugash sanasi">
+    </span>
+  </div>`;
 }
 
-function renderOrderDishesGrid() {
-  const grid = document.getElementById("menuDishesGrid");
-  if (!grid) return;
-  grid.innerHTML = "";
-
-  const searchInput = document.getElementById("inputMenuSearch");
-  const query = searchInput ? searchInput.value.toLowerCase().trim() : "";
-
-  let filtered = STATE.products.filter(p => p.isAvailable !== false);
-
-  if (STATE.activeOrderCategory !== "all") {
-    filtered = filtered.filter(p => p.categoryId === STATE.activeOrderCategory);
-  }
-
-  if (query) {
-    filtered = filtered.filter(p =>
-      p.name.toLowerCase().includes(query) ||
-      String(p.price).includes(query)
-    );
-  }
-
-  if (filtered.length === 0) {
-    grid.innerHTML = `<div class="empty-search-hint">Ushbu toifada yoki so'rov bo'yicha taom topilmadi.</div>`;
-    return;
-  }
-
-  filtered.forEach(product => {
-    const card = document.createElement("div");
-    card.className = "dish-card";
-    card.innerHTML = `
-      <div class="dish-card-icon">${product.icon || "🍲"}</div>
-      <div class="dish-card-body">
-        <h4 class="dish-card-title">${product.name}</h4>
-        <div class="dish-card-price">${formatMoney(product.price)}</div>
-      </div>
-      <button class="dish-add-btn" title="Buyurtmaga qo'shish">+</button>
-    `;
-
-    card.onclick = () => addItemToCart(product);
-    grid.appendChild(card);
-  });
-}
-
-function addItemToCart(product) {
-  // Validatsiya
-  if (!product || product.price < 0) {
-    alert("Noto'g'ri mahsulot narxi!");
-    return;
-  }
-
-  const cart = STATE.currentOrderCart;
-  const existing = cart.items.find(i => i.productId === product.id && !i.notes);
-
-  if (existing) {
-    existing.qty += 1;
-    existing.total = existing.qty * existing.price;
-  } else {
-    cart.items.push({
-      id: Date.now() + Math.floor(Math.random() * 1000),
-      productId: product.id,
-      name: product.name,
-      price: product.price,
-      qty: 1,
-      total: product.price,
-      notes: ""
-    });
-  }
-
-  renderOrderCart();
-}
-
-function updateCartItemQty(index, delta) {
-  const cart = STATE.currentOrderCart;
-  if (!cart.items[index]) return;
-
-  cart.items[index].qty += delta;
-
-  if (cart.items[index].qty <= 0) {
-    cart.items.splice(index, 1);
-  } else {
-    cart.items[index].total = cart.items[index].qty * cart.items[index].price;
-  }
-
-  renderOrderCart();
-}
-
-function removeCartItem(index) {
-  STATE.currentOrderCart.items.splice(index, 1);
-  renderOrderCart();
-}
-
-function openItemNoteModal(index) {
-  STATE.currentEditingItemIndex = index;
-  const item = STATE.currentOrderCart.items[index];
-  if (!item) return;
-
-  document.getElementById("noteDishTitle").innerHTML = `<strong>${item.name}</strong> uchun maxsus izoh:`;
-  document.getElementById("inputItemNote").value = item.notes || "";
-  openModal("modalItemNote");
-}
-
-function saveItemNote() {
-  if (STATE.currentEditingItemIndex !== null) {
-    const input = document.getElementById("inputItemNote");
-    const item = STATE.currentOrderCart.items[STATE.currentEditingItemIndex];
-    if (item) {
-      item.notes = input.value.trim();
-    }
-  }
-  closeModal("modalItemNote");
-  renderOrderCart();
-}
-
-function setQuickNote(text) {
-  const input = document.getElementById("inputItemNote");
-  if (input) {
-    input.value = text;
-  }
-}
-
-function renderOrderCart() {
-  const listContainer = document.getElementById("cartItemsList");
-  const emptyState = document.getElementById("cartEmptyState");
-  const cart = STATE.currentOrderCart;
-
-  const currentTable = STATE.tables.find(t => t.id === Number(cart.tableId));
-  const badge = document.getElementById("cartTableBadge");
-  if (badge && currentTable) {
-    badge.textContent = currentTable.name;
-  }
-
-  if (!listContainer) return;
-
-  if (!cart.items || cart.items.length === 0) {
-    listContainer.innerHTML = "";
-    if (emptyState) emptyState.style.display = "flex";
-  } else {
-    if (emptyState) emptyState.style.display = "none";
-    listContainer.innerHTML = "";
-
-    cart.items.forEach((item, idx) => {
-      const row = document.createElement("div");
-      row.className = "cart-item-row";
-      row.innerHTML = `
-        <div class="cart-item-main">
-          <div class="cart-item-title">
-            <strong>${item.name}</strong>
-            ${item.notes ? `<span class="cart-item-note">💬 ${item.notes}</span>` : ""}
-          </div>
-          <div class="cart-item-price-unit">${formatMoney(item.price)}</div>
-        </div>
-
-        <div class="cart-item-controls">
-          <div class="qty-control-box">
-            <button class="btn-qty" onclick="updateCartItemQty(${idx}, -1)">-</button>
-            <span class="qty-val">${item.qty}</span>
-            <button class="btn-qty" onclick="updateCartItemQty(${idx}, 1)">+</button>
-          </div>
-          <div class="cart-item-total">${formatMoney(item.total)}</div>
-          <button class="btn-item-note" onclick="openItemNoteModal(${idx})" title="Izoh yozish">💬</button>
-          <button class="btn-item-del" onclick="removeCartItem(${idx})" title="O'chirish">🗑️</button>
-        </div>
-      `;
-      listContainer.appendChild(row);
-    });
-  }
-
-  // Hisob-kitob
-  const subtotal = cart.items.reduce((s, it) => s + it.total, 0);
-  const chkService = document.getElementById("chkCartServiceCharge");
-  const servicePercent = STATE.settings.serviceChargePercent || 10;
-  document.getElementById("cartServicePercent").textContent = servicePercent;
-
-  const serviceCharge = (chkService && chkService.checked) ? Math.round(subtotal * (servicePercent / 100)) : 0;
-  const grandTotal = subtotal + serviceCharge;
-
-  document.getElementById("cartSubtotal").textContent = formatMoney(subtotal);
-  document.getElementById("cartServiceCharge").textContent = formatMoney(serviceCharge);
-  document.getElementById("cartGrandTotal").textContent = formatMoney(grandTotal);
-}
-
-function startNewOrderForTable(tableId) {
-  STATE.currentOrderCart.tableId = tableId;
-  STATE.currentOrderCart.items = [];
-  STATE.currentOrderCart.customerId = null;
-
-  // Agar stolda oldin zakaz bo'lsa uni yuklaymiz
-  const table = STATE.tables.find(t => t.id === tableId);
-  if (table && table.currentOrderId) {
-    const existingOrder = STATE.orders.find(o => o.id === table.currentOrderId && o.status !== "completed");
-    if (existingOrder) {
-      STATE.currentOrderCart.items = JSON.parse(JSON.stringify(existingOrder.items));
-      STATE.currentOrderCart.customerId = existingOrder.customerId;
-    }
-  }
-
-  navigateTo("orders");
-}
-
-// 16. MUHIM ISH JARAYONI: OSHXONAGA BUYURTMANI YUBORISH
-function sendOrderToKitchen() {
-  const cart = STATE.currentOrderCart;
-
-  // VALIDATSIYA 1: Bo'sh buyurtma yuborilmasin
-  if (!cart.items || cart.items.length === 0) {
-    alert("Iltimos, avval stolga kamida bitta taom tanlang!");
-    return;
-  }
-
-  // VALIDATSIYA 2: Stol to'g'ri tanlanganligini tekshirish
-  const table = STATE.tables.find(t => t.id === Number(cart.tableId));
-  if (!table) {
-    alert("Iltimos, stolni tanlang!");
-    return;
-  }
-
-  const subtotal = cart.items.reduce((s, it) => s + it.total, 0);
-  const chkService = document.getElementById("chkCartServiceCharge");
-  const servicePercent = STATE.settings.serviceChargePercent || 10;
-  const serviceCharge = (chkService && chkService.checked) ? Math.round(subtotal * (servicePercent / 100)) : 0;
-  const grandTotal = subtotal + serviceCharge;
-
-  // Mijoz ma'lumoti
-  let customerName = "Oddiy mijoz";
-  if (cart.customerId) {
-    const cust = STATE.customers.find(c => c.id === Number(cart.customerId));
-    if (cust) customerName = cust.name;
-  }
-
-  // Mavjud buyurtma bormi yoki yangisi
-  let order = null;
-  if (table.currentOrderId) {
-    order = STATE.orders.find(o => o.id === table.currentOrderId && o.status !== "completed");
-  }
-
-  if (order) {
-    // Buyurtmani yangilash
-    order.items = JSON.parse(JSON.stringify(cart.items));
-    order.subtotal = subtotal;
-    order.serviceCharge = serviceCharge;
-    order.total = grandTotal;
-    order.customerId = cart.customerId;
-    order.customerName = customerName;
-    order.status = "preparing";
-    order.kitchenStatus = "new"; // Oshpazga yangi qo'shilgan taomlar haqida bildirish
-  } else {
-    // Yangi buyurtma yaratish
-    order = {
-      id: Date.now(),
-      orderNumber: generateOrderNumber(),
-      tableId: table.id,
-      tableName: table.name,
-      customerId: cart.customerId,
-      customerName: customerName,
-      waiterId: STATE.currentUser?.id || 1,
-      waiterName: STATE.currentUser?.name || "Ofitsiant",
-      items: JSON.parse(JSON.stringify(cart.items)),
-      status: "new",
-      kitchenStatus: "new",
-      subtotal: subtotal,
-      serviceCharge: serviceCharge,
-      total: grandTotal,
-      createdAt: new Date().toISOString(),
-      paymentMethod: null
-    };
-    STATE.orders.push(order);
-  }
-
-  // Stol holatini yangilash
-  table.status = "preparing";
-  table.currentOrderId = order.id;
-
-  saveState();
-
-  alert(`✅ ${order.orderNumber} raqamli buyurtma ${table.name} uchun Oshxonaga muvaffaqiyatli yuborildi!`);
-  
-  // Stollar ekraniga qaytish
-  navigateTo("tables");
-}
-
-// ================= 10. SAHIFA: 4. OSHXONA (KDS) =================
-function renderKitchenView() {
-  const colNew = document.getElementById("kdsCardsNew");
-  const colPrep = document.getElementById("kdsCardsPrep");
-  const colReady = document.getElementById("kdsCardsReady");
-  const colServed = document.getElementById("kdsCardsServed");
-
-  if (!colNew || !colPrep || !colReady || !colServed) return;
-
-  colNew.innerHTML = "";
-  colPrep.innerHTML = "";
-  colReady.innerHTML = "";
-  colServed.innerHTML = "";
-
-  const activeOrders = STATE.orders.filter(o => o.status !== "completed" && o.status !== "cancelled");
-
-  let countNew = 0, countPrep = 0, countReady = 0, countServed = 0;
-
-  activeOrders.forEach(order => {
-    const kStatus = order.kitchenStatus || "new";
-
-    const card = document.createElement("div");
-    card.className = `kds-order-card kds-status-${kStatus}`;
-
-    // Taomlar ro'yxati
-    let itemsHTML = "";
-    order.items.forEach((it, idx) => {
-      itemsHTML += `
-        <div class="kds-dish-line">
-          <span class="kds-dish-name"><strong>${idx + 1}. ${it.name}</strong> ${it.notes ? `<small class="kds-note">(${it.notes})</small>` : ""}</span>
-          <span class="kds-dish-qty">x ${it.qty}</span>
-        </div>
-      `;
-    });
-
-    // Tugmalar
-    let actionBtnHTML = "";
-    if (kStatus === "new") {
-      countNew++;
-      actionBtnHTML = `
-        <button class="btn btn-warning btn-sm btn-block" onclick="changeKitchenOrderStatus(${order.id}, 'preparing')">
-          👨‍🍳 Qabul qilish (Tayyorlanmoqda)
-        </button>
-      `;
-      colNew.appendChild(card);
-    } else if (kStatus === "preparing") {
-      countPrep++;
-      actionBtnHTML = `
-        <button class="btn btn-success btn-sm btn-block" onclick="changeKitchenOrderStatus(${order.id}, 'ready')">
-          ✅ Tayyor bo'ldi (Ofitsiantga)
-        </button>
-      `;
-      colPrep.appendChild(card);
-    } else if (kStatus === "ready") {
-      countReady++;
-      actionBtnHTML = `
-        <button class="btn btn-primary btn-sm btn-block" onclick="changeKitchenOrderStatus(${order.id}, 'served')">
-          🍽️ Mijozga Berildi
-        </button>
-      `;
-      colReady.appendChild(card);
-    } else {
-      countServed++;
-      actionBtnHTML = `
-        <div class="kds-served-tag">Mijozda ovqatlanmoqda ✓</div>
-      `;
-      colServed.appendChild(card);
-    }
-
-    card.innerHTML = `
-      <div class="kds-card-top">
-        <div>
-          <span class="kds-order-num">${order.orderNumber}</span>
-          <span class="kds-table-badge">${order.tableName}</span>
-        </div>
-        <span class="kds-time">⏰ ${formatTimeOnly(order.createdAt)}</span>
-      </div>
-      <div class="kds-waiter-info">Ofitsiant: <strong>${order.waiterName || "Ali"}</strong></div>
-      <div class="kds-dishes-box">
-        ${itemsHTML}
-      </div>
-      <div class="kds-card-footer">
-        ${actionBtnHTML}
-      </div>
-    `;
-  });
-
-  document.getElementById("kdsCountNew").textContent = countNew;
-  document.getElementById("kdsCountPrep").textContent = countPrep;
-  document.getElementById("kdsCountReady").textContent = countReady;
-  document.getElementById("kdsCountServed").textContent = countServed;
-  document.getElementById("kdsBadgeActive").textContent = `${countNew + countPrep + countReady} ta faol zakaz`;
-}
-
-function changeKitchenOrderStatus(orderId, newStatus) {
-  const order = STATE.orders.find(o => o.id === orderId);
-  if (!order) return;
-
-  order.kitchenStatus = newStatus;
-
-  // Asosiy stol holatini ham yangilash
-  const table = STATE.tables.find(t => t.id === order.tableId);
-  if (table) {
-    if (newStatus === "preparing") {
-      table.status = "preparing";
-      order.status = "preparing";
-    } else if (newStatus === "ready") {
-      table.status = "occupied";
-      order.status = "ready";
-    } else if (newStatus === "served") {
-      table.status = "occupied";
-      order.status = "served";
-    }
-  }
-
-  saveState();
-  renderKitchenView();
-  updateHeaderKPIs();
-}
-
-// ================= 11. SAHIFA: 5. KASSA VA TO'LOV QABUL QILISH =================
-function renderCashierView() {
-  const ordersContainer = document.getElementById("cashierOrdersList");
-  if (!ordersContainer) return;
-  ordersContainer.innerHTML = "";
-
-  // To'lov kutayotgan barcha faol buyurtmalar
-  const openOrders = STATE.orders.filter(o => o.status !== "completed" && o.status !== "cancelled");
-  document.getElementById("cashierWaitingOrdersCount").textContent = `${openOrders.length} ta buyurtma`;
-
-  // Bugungi kassa tushumi
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const todaySales = STATE.orders
-    .filter(o => o.status === "completed" && o.completedAt && o.completedAt.startsWith(todayStr))
-    .reduce((s, o) => s + (o.total || 0), 0);
-  document.getElementById("cashierTotalToday").textContent = formatMoney(todaySales);
-
-  if (openOrders.length === 0) {
-    ordersContainer.innerHTML = `
-      <div class="cart-empty-state">
-        <span class="empty-icon">🟢</span>
-        <p>Hozirda barcha hisoblar yopilgan</p>
-      </div>
-    `;
-    selectCashierOrder(null);
-    return;
-  }
-
-  openOrders.forEach(order => {
-    const isSelected = order.id === STATE.selectedCashierOrderId;
-    const card = document.createElement("div");
-    card.className = `cashier-order-item ${isSelected ? 'selected' : ''}`;
-    card.innerHTML = `
-      <div class="c-order-top">
-        <strong>${order.tableName}</strong>
-        <span class="badge badge-purple">${order.orderNumber}</span>
-      </div>
-      <div class="c-order-mid">
-        <span>Taomlar: ${order.items.reduce((s, it) => s + it.qty, 0)} ta</span>
-        <span>⏰ ${formatTimeOnly(order.createdAt)}</span>
-      </div>
-      <div class="c-order-total text-green">${formatMoney(order.total)}</div>
-    `;
-
-    card.onclick = () => selectCashierOrder(order.id);
-    ordersContainer.appendChild(card);
-  });
-
-  // Agar oldin tanlanmagan bo'lsa birinchisini avtomatik tanlaymiz
-  if (!STATE.selectedCashierOrderId && openOrders.length > 0) {
-    selectCashierOrder(openOrders[0].id);
-  } else {
-    renderSelectedCashierOrderPanel();
-  }
-}
-
-function selectCashierOrder(orderId) {
-  STATE.selectedCashierOrderId = orderId;
-  const items = document.querySelectorAll(".cashier-order-item");
-  items.forEach(el => el.classList.remove("selected"));
-
-  renderSelectedCashierOrderPanel();
-}
-
-function renderSelectedCashierOrderPanel() {
-  const emptyBox = document.getElementById("cashierPayContentEmpty");
-  const activeBox = document.getElementById("cashierPayContentActive");
-  const tag = document.getElementById("paySelectedTableTag");
-
-  if (!STATE.selectedCashierOrderId) {
-    if (emptyBox) emptyBox.style.display = "flex";
-    if (activeBox) activeBox.style.display = "none";
-    if (tag) tag.textContent = "Stol tanlanmagan";
-    return;
-  }
-
-  const order = STATE.orders.find(o => o.id === STATE.selectedCashierOrderId);
-  if (!order) {
-    STATE.selectedCashierOrderId = null;
-    renderSelectedCashierOrderPanel();
-    return;
-  }
-
-  if (emptyBox) emptyBox.style.display = "none";
-  if (activeBox) activeBox.style.display = "block";
-
-  if (tag) tag.textContent = `${order.tableName} — ${order.orderNumber}`;
-
-  document.getElementById("payOrderNumber").textContent = order.orderNumber;
-  document.getElementById("payOrderTime").textContent = `Vaqt: ${formatDate(order.createdAt)}`;
-  document.getElementById("payOrderWaiter").textContent = order.waiterName || "Ali";
-
-  // Taomlar ro'yxati
-  const tbody = document.getElementById("payOrderItemsBody");
-  if (tbody) {
-    tbody.innerHTML = "";
-    order.items.forEach((it, idx) => {
-      const tr = document.createElement("tr");
-      tr.innerHTML = `
-        <td>${idx + 1}. ${it.name}</td>
-        <td style="text-align:center;">${it.qty}</td>
-        <td style="text-align:right;">${formatMoney(it.price)}</td>
-        <td style="text-align:right; font-weight:bold;">${formatMoney(it.total)}</td>
-      `;
-      tbody.appendChild(tr);
-    });
-  }
-
-  document.getElementById("paySubtotal").textContent = formatMoney(order.subtotal);
-  document.getElementById("payServiceCharge").textContent = formatMoney(order.serviceCharge);
-  document.getElementById("payGrandTotal").textContent = formatMoney(order.total);
-
-  // Naqd kalkulyatori
-  const inpCash = document.getElementById("inputCashReceived");
-  if (inpCash) {
-    inpCash.value = "";
-    calculateCashChange();
-  }
-}
-
-function calculateCashChange() {
-  const order = STATE.orders.find(o => o.id === STATE.selectedCashierOrderId);
-  const total = order ? order.total : 0;
-  const input = document.getElementById("inputCashReceived");
-  const given = input ? (Number(input.value) || 0) : 0;
-
-  const change = Math.max(0, given - total);
-  const changeEl = document.getElementById("textCashChange");
-  if (changeEl) {
-    changeEl.textContent = formatMoney(change);
-  }
-}
-
-// 16. MUHIM ISH JARAYONI: TO'LOVNI QABUL QILISH VA CHEK CHIQARISH
-function executePayment() {
-  const order = STATE.orders.find(o => o.id === STATE.selectedCashierOrderId);
-  if (!order) {
-    alert("Iltimos, to'lov uchun buyurtmani tanlang!");
-    return;
-  }
-
-  // To'lov usulini olish
-  const methodRadio = document.querySelector('input[name="payMethod"]:checked');
-  const payMethod = methodRadio ? methodRadio.value : "Naqd";
-
-  // VALIDATSIYA: Agar naqd to'lov bo'lsa berilgan pulni tekshirish
-  if (payMethod === "Naqd") {
-    const input = document.getElementById("inputCashReceived");
-    const given = Number(input.value) || 0;
-    if (given > 0 && given < order.total) {
-      alert(`Berilgan summa yetarli emas! Jami to'lov: ${formatMoney(order.total)}`);
-      return;
-    }
-  }
-
-  // Buyurtmani yopish
-  order.status = "completed";
-  order.paymentMethod = payMethod;
-  order.completedAt = new Date().toISOString();
-  order.cashierName = STATE.currentUser?.name || "Kassir";
-
-  // Stolni bo'shatish
-  const table = STATE.tables.find(t => t.id === order.tableId);
-  if (table) {
-    table.status = "vacant";
-    table.currentOrderId = null;
-  }
-
-  // Mijoz hisobini yangilash
-  if (order.customerId) {
-    const customer = STATE.customers.find(c => c.id === Number(order.customerId));
-    if (customer) {
-      customer.ordersCount = (customer.ordersCount || 0) + 1;
-      customer.totalSpent = (customer.totalSpent || 0) + order.total;
-      customer.lastOrderAt = order.completedAt;
-    }
-  }
-
-  saveState();
-
-  // Chek chiqarish modalini ochish
-  showReceiptModal(order);
-
-  // Kassa ko'rinishini yangilash
-  STATE.selectedCashierOrderId = null;
-  renderCashierView();
-}
-
-// ================= 12. CHEK CHIQARISH (PRINT & PDF VIEW) =================
-function showReceiptModal(order) {
-  const paper = document.getElementById("printableReceipt");
-  if (!paper || !order) return;
-
-  let itemsHTML = "";
-  order.items.forEach((it, idx) => {
-    itemsHTML += `
-      <tr>
-        <td style="padding: 3px 0;">${idx + 1}. ${it.name}</td>
-        <td style="text-align: center; padding: 3px 0;">${it.qty}</td>
-        <td style="text-align: right; padding: 3px 0;">${Number(it.price).toLocaleString("uz-UZ")}</td>
-        <td style="text-align: right; font-weight: bold; padding: 3px 0;">${Number(it.total).toLocaleString("uz-UZ")}</td>
-      </tr>
-    `;
-  });
-
-  paper.innerHTML = `
-    <div class="thermal-receipt">
-      <div class="receipt-header">
-        <h2>${STATE.settings.restaurantName.toUpperCase()}</h2>
-        <p>${STATE.settings.receiptHeader}</p>
-        <p>Tel: ${STATE.settings.phone}</p>
-        <p>${STATE.settings.address}</p>
-      </div>
-
-      <div class="receipt-divider">================================</div>
-
-      <div class="receipt-info-grid">
-        <div>Sana: ${formatDate(order.completedAt || order.createdAt)}</div>
-        <div>Chek №: <strong>${order.orderNumber}</strong></div>
-        <div>Stol: <strong>${order.tableName.toUpperCase()}</strong></div>
-        <div>Ofitsiant: ${order.waiterName || "Ali"}</div>
-        <div>Kassir: ${order.cashierName || STATE.currentUser?.name || "Kassir"}</div>
-        ${order.customerName ? `<div>Mijoz: ${order.customerName}</div>` : ""}
-      </div>
-
-      <div class="receipt-divider">--------------------------------</div>
-
-      <table class="receipt-items-table">
-        <thead>
-          <tr>
-            <th style="text-align: left;">Taom</th>
-            <th style="text-align: center;">Soni</th>
-            <th style="text-align: right;">Narx</th>
-            <th style="text-align: right;">Jami</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${itemsHTML}
-        </tbody>
-      </table>
-
-      <div class="receipt-divider">--------------------------------</div>
-
-      <div class="receipt-totals-box">
-        <div class="r-row">
-          <span>Taomlar summasi:</span>
-          <span>${formatMoney(order.subtotal)}</span>
-        </div>
-        ${order.serviceCharge > 0 ? `
-        <div class="r-row">
-          <span>Xizmat haqi (${STATE.settings.serviceChargePercent}%):</span>
-          <span>${formatMoney(order.serviceCharge)}</span>
-        </div>` : ""}
-        <div class="r-row r-grand-total">
-          <strong>JAMI TO'LOV:</strong>
-          <strong>${formatMoney(order.total)}</strong>
-        </div>
-        <div class="r-row">
-          <span>To'lov turi:</span>
-          <strong>${order.paymentMethod || "Naqd"}</strong>
-        </div>
-      </div>
-
-      <div class="receipt-divider">================================</div>
-
-      <div class="receipt-footer">
-        <p>*** TO'LOV MUVAFFAQIYATLI QABUL QILINDI ***</p>
-        <p>${STATE.settings.receiptFooter}</p>
+// ---------------------------------------------------------------------
+// 9. BUYURTMALAR
+// ---------------------------------------------------------------------
+let ordFilter = "all";
+let ordSearch = "";
+const orderDate = (o) => o.paidAt || o.refundedAt || o.cancelledAt || o.createdAt;
+
+function renderOrders() {
+  const filters = [["all", "Barchasi"], ["open", "Ochiq"], ["paid", "To'langan"], ["cancelled", "Bekor qilingan"]];
+  const q = ordSearch.trim().replace("#", "");
+  // Ochiq buyurtmalar sanadan qat'i nazar doim ko'rinadi
+  const base = ordersFor(F.ord, renderOrders)
+    .filter((o) => o.status === "open" || inRange(orderDate(o), F.ord))
+    .filter((o) => !q || String(o.no) === q);
+  const list = base.filter((o) => ordFilter === "all" || o.status === ordFilter).sort((a, b) => b.id - a.id).slice(0, 300);
+  // Tushum — faqat to'langan buyurtmalar (tanlangan sana bo'yicha)
+  const paid = base.filter((o) => o.status === "paid");
+  const revenue = paid.reduce((s, o) => s + o.total, 0);
+  const cash = paid.reduce((s, o) => s + o.payment.cash, 0);
+  const card = paid.reduce((s, o) => s + o.payment.card, 0);
+  const focused = document.activeElement && document.activeElement.id === "ordSearch";
+  $("content").innerHTML = `
+    <div class="page-head">
+      <div><h2>Buyurtmalar</h2><p class="muted">${rangeLabel(F.ord)}</p></div>
+      <div class="row">
+        <div class="search">${icon("search")}<input id="ordSearch" placeholder="Buyurtma raqami" value="${esc(ordSearch)}" oninput="ordSearch=this.value;renderOrders()"></div>
+        ${can("kassa") ? `<button class="btn primary" onclick="go('kassa')">${icon("plus")} Yangi buyurtma</button>` : ""}
       </div>
     </div>
-  `;
-
-  openModal("modalReceipt");
+    <div class="toolbar">${dateBar("ord", "renderOrders")}</div>
+    <div class="kpis">
+      <div class="card kpi c-green"><span>Tushum</span><b>${money(revenue)}</b></div>
+      <div class="card kpi c-blue"><span>To'langan cheklar</span><b>${paid.length} ta</b></div>
+      <div class="card kpi c-orange"><span>Naqd pul</span><b>${money(cash)}</b></div>
+      <div class="card kpi c-purple"><span>Karta</span><b>${money(card)}</b></div>
+    </div>
+    <div class="filters mb">
+      ${filters.map(([k, l]) => `<button class="chip-btn ${ordFilter === k ? "active" : ""}" onclick="ordFilter='${k}';renderOrders()">${l} <span>${base.filter((o) => k === "all" || o.status === k).length}</span></button>`).join("")}
+    </div>
+    <div class="ocards">
+      ${list.map((o) => {
+        const st = orderStatus(o);
+        const qty = o.items.reduce((s, i) => s + i.qty, 0);
+        return `<div class="ocard ${o.status}">
+          <div class="ocard-top">
+            <span class="avatar sm">${esc(initials(o.createdBy || "?"))}</span>
+            <div class="ocard-who"><b>${esc(o.createdBy || "—")}</b><small>#${o.no} · ${dt(orderDate(o))}</small></div>
+            <span class="badge ${st[1]}">${st[0]}</span>
+          </div>
+          <div class="ocard-mid">
+            <span class="muted">${esc(placeName(o.hall, o.table))} · ${qty} ta${o.payment ? " · " + PAY_LABEL[o.payment.method] : ""}</span>
+            <b>${money(calc(o).total)}</b>
+          </div>
+          <div class="ocard-items">${o.items.slice(0, 4).map((i) => `${i.qty}× ${esc(i.name)}`).join(", ")}${o.items.length > 4 ? "…" : ""}</div>
+          <div class="ocard-actions">
+            <button class="btn sm green" onclick="showReceipt(${o.id})">${icon("eye")} Mahsulotlar</button>
+            ${o.status === "open" && can("kassa") ? `<button class="btn sm primary" onclick="openInKassa('${o.hall}',${o.table})">Kassada ochish</button>` : ""}
+            ${o.status === "open" && me.role === "admin" ? `<button class="btn sm red" onclick="cancelOrder(${o.id})">Bekor</button>` : ""}
+          </div>
+        </div>`;
+      }).join("") || `<div class="empty-state"><b>Buyurtma topilmadi</b><span>Sana yoki filtrni o'zgartirib ko'ring</span></div>`}
+    </div>`;
+  if (focused) { const i = $("ordSearch"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
 }
 
-// ================= 13. STOL TAFSILOTLARI VA STOLNI KO'CHIRISH =================
-function openTableDetailModal(tableId) {
-  const table = STATE.tables.find(t => t.id === tableId);
-  if (!table) return;
+function openInKassa(h, t) {
+  selHall = h;
+  selTable = t;
+  pay = newPay();
+  go("kassa");
+}
 
-  const title = document.getElementById("modalTableDetailTitle");
-  const statusBadge = document.getElementById("modalTableDetailStatus");
-  const body = document.getElementById("modalTableDetailBody");
-  const footer = document.getElementById("modalTableDetailFooter");
+async function cancelOrder(id) {
+  const o = findOrder(id);
+  if (!o || !confirm(`Buyurtma #${o.no} (${placeName(o.hall, o.table)}) bekor qilinsinmi?`)) return;
+  if (await act("order.cancel", { orderId: id })) toast("Buyurtma bekor qilindi", "warn");
+}
 
-  title.textContent = `🪑 ${table.name.toUpperCase()}`;
-  statusBadge.textContent = getTableStatusLabel(table.status);
-  statusBadge.className = `badge badge-${table.status}`;
+// ---------------------------------------------------------------------
+// 9a. ADMIN PANEL: savdo natijalari va qaysi taom qancha sotilgani
+// ---------------------------------------------------------------------
+let admSort = "qty";
 
-  const activeOrder = STATE.orders.find(o => o.id === table.currentOrderId && o.status !== "completed");
-
-  if (!activeOrder) {
-    body.innerHTML = `
-      <div class="text-center" style="padding: 24px;">
-        <span style="font-size: 36px;">🟢</span>
-        <h4>Ushbu stol hozirda bo'sh</h4>
-        <p class="text-muted">Mijoz uchun yangi buyurtma olishingiz mumkin</p>
-      </div>
-    `;
-    footer.innerHTML = `
-      <button class="btn btn-primary btn-block" onclick="closeModal('modalTableDetail'); startNewOrderForTable(${table.id});">
-        ➕ Yangi Buyurtma Olish
-      </button>
-    `;
-  } else {
-    let itemsRows = "";
-    activeOrder.items.forEach((it, idx) => {
-      itemsRows += `
-        <tr>
-          <td>${idx + 1}. ${it.name} ${it.notes ? `<small class="text-muted">(${it.notes})</small>` : ""}</td>
-          <td style="text-align:center;">${it.qty}</td>
-          <td style="text-align:right;">${formatMoney(it.price)}</td>
-          <td style="text-align:right; font-weight:bold;">${formatMoney(it.total)}</td>
-        </tr>
-      `;
+function dishSales(f, rerender) {
+  const paid = ordersFor(f, rerender).filter((o) => o.status === "paid" && inRange(o.paidAt, f));
+  const rows = {};
+  paid.forEach((o) => {
+    const k = o.discount ? 1 - o.discount / 100 : 1;   // chegirma taomlarga taqsimlanadi
+    o.items.forEach((i) => {
+      const m = S.menu.find((x) => x.id === i.pid);
+      const key = m ? "m" + m.id : "n" + i.name;
+      const r = rows[key] || (rows[key] = { name: m ? m.name : i.name, cat: m ? (S.categories.find((c) => c.id === m.catId) || {}).name || "—" : "—", qty: 0, sum: 0, orders: 0 });
+      r.qty += i.qty;
+      r.sum += i.qty * i.price * k;
+      r.orders++;
     });
+  });
+  const revenue = paid.reduce((s, o) => s + o.total, 0);
+  return { paid, revenue, rows: Object.values(rows) };
+}
 
-    body.innerHTML = `
-      <div class="table-detail-meta">
-        <div><strong>Buyurtma:</strong> ${activeOrder.orderNumber}</div>
-        <div><strong>Vaqt:</strong> ${formatDate(activeOrder.createdAt)}</div>
-        <div><strong>Ofitsiant:</strong> ${activeOrder.waiterName || "Ali"}</div>
-        <div><strong>Mijoz:</strong> ${activeOrder.customerName || "Oddiy mijoz"}</div>
+function renderAdmin() {
+  const f = F.adm;
+  const d = dishSales(f, renderAdmin);
+  const rows = d.rows.sort((a, b) => admSort === "sum" ? b.sum - a.sum : b.qty - a.qty);
+  const totalQty = rows.reduce((s, r) => s + r.qty, 0);
+  const itemsSum = rows.reduce((s, r) => s + r.sum, 0);
+  const maxV = Math.max(1, ...rows.map((r) => admSort === "sum" ? r.sum : r.qty));
+  const soldIds = new Set(rows.map((r) => r.name));
+  const unsold = S.menu.filter((m) => !soldIds.has(m.name));
+  const cats = {};
+  rows.forEach((r) => { cats[r.cat] = (cats[r.cat] || 0) + r.sum; });
+  const catList = Object.entries(cats).sort((a, b) => b[1] - a[1]);
+  const open = S.orders.filter((o) => o.status === "open");
+  $("content").innerHTML = `
+    <div class="page-head">
+      <div><h2>Admin panel</h2><p class="muted"><b>${rangeLabel(f)}</b> bo'yicha savdo</p></div>
+      <div class="row">
+        <button class="btn" onclick="printDishSales()">${icon("print")} Chek chiqarish</button>
+        <button class="btn" onclick="go('menu')">${icon("book")} Menyu</button>
+        <button class="btn primary" onclick="openDishForm()">${icon("plus")} Taom qo'shish</button>
       </div>
-
-      <div class="table-responsive" style="margin-top: 10px; max-height: 200px; overflow-y: auto;">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Taom</th>
-              <th style="text-align:center;">Soni</th>
-              <th style="text-align:right;">Narx</th>
-              <th style="text-align:right;">Jami</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${itemsRows}
-          </tbody>
+    </div>
+    <div class="toolbar">${dateBar("adm", "renderAdmin")}</div>
+    <div class="kpis">
+      <div class="card kpi c-green"><span>Tushum</span><b>${money(d.revenue)}</b></div>
+      <div class="card kpi c-blue"><span>Cheklar soni</span><b>${d.paid.length} ta</b><small>o'rtacha ${money(d.paid.length ? d.revenue / d.paid.length : 0)}</small></div>
+      <div class="card kpi c-orange"><span>Sotilgan taomlar</span><b>${totalQty} ta</b><small>${rows.length} xil taom</small></div>
+      <div class="card kpi c-purple"><span>Hozir ochiq stollar</span><b>${open.length} ta</b><small>${money(open.reduce((s, o) => s + calc(o).total, 0))}</small></div>
+    </div>
+    ${admOrdersHtml(f)}
+    <div class="adm-grid">
+      <div class="card table-wrap" style="padding:0">
+        <div class="card-head adm-head">
+          <h3>${icon("chart")} Qaysi taom qancha sotildi</h3>
+          <div class="seg">
+            <button class="${admSort === "qty" ? "active" : ""}" onclick="admSort='qty';renderAdmin()">Soni bo'yicha</button>
+            <button class="${admSort === "sum" ? "active" : ""}" onclick="admSort='sum';renderAdmin()">Summa bo'yicha</button>
+          </div>
+        </div>
+        <table class="tbl-list">
+          <thead><tr><th>#</th><th>Taom</th><th>Kategoriya</th><th class="r">Soni</th><th class="r">Summa</th><th style="width:28%">Ulushi</th></tr></thead>
+          <tbody>${rows.map((r, i) => {
+            const v = admSort === "sum" ? r.sum : r.qty;
+            return `<tr>
+              <td class="muted">${i + 1}</td>
+              <td><b>${esc(r.name)}</b></td>
+              <td class="muted">${esc(r.cat)}</td>
+              <td class="r"><b>${r.qty}</b> ta</td>
+              <td class="r">${money(r.sum)}</td>
+              <td><div class="hbar-track"><i style="width:${(v / maxV) * 100}%"></i></div>
+                <small class="muted">${itemsSum ? Math.round((r.sum / itemsSum) * 100) : 0}% tushumdan</small></td>
+            </tr>`;
+          }).join("") || `<tr><td colspan="6"><div class="empty-state small"><b>Bu davrda sotuv yo'q</b><span>Boshqa sanani tanlab ko'ring</span></div></td></tr>`}</tbody>
         </table>
       </div>
-
-      <div class="table-detail-totals" style="margin-top: 12px; background: #f8fafc; padding: 10px; border-radius: 6px;">
-        <div class="fin-row">
-          <span>Taomlar summasi:</span>
-          <strong>${formatMoney(activeOrder.subtotal)}</strong>
+      <div>
+        <div class="card">
+          <div class="card-head"><h3>Kategoriyalar bo'yicha</h3></div>
+          ${catList.map(([n, v]) => `<div class="hbar"><div class="hbar-top"><span>${esc(n)}</span><b>${money(v)}</b></div><div class="hbar-track"><i class="green" style="width:${itemsSum ? (v / itemsSum) * 100 : 0}%"></i></div></div>`).join("") || `<div class="muted">Ma'lumot yo'q</div>`}
         </div>
-        <div class="fin-row">
-          <span>Xizmat haqi (${STATE.settings.serviceChargePercent}%):</span>
-          <strong>${formatMoney(activeOrder.serviceCharge)}</strong>
-        </div>
-        <div class="fin-row fin-total" style="font-size: 16px; margin-top: 4px;">
-          <span>JAMI SUMMA:</span>
-          <strong class="text-green">${formatMoney(activeOrder.total)}</strong>
+        <div class="card mt">
+          <div class="card-head"><h3>Sotilmagan taomlar</h3><span class="badge gray">${unsold.length}</span></div>
+          ${unsold.length ? `<div class="unsold">${unsold.map((m) => `<button class="chip-btn" onclick="openDishForm(${m.id})" title="Tahrirlash">${esc(m.name)}</button>`).join("")}</div>` : `<div class="muted">Hamma taom sotilgan 👍</div>`}
         </div>
       </div>
-    `;
+    </div>`;
+}
 
-    // Tugmalar: Taom qo'shish, Stolni ko'chirish, Kassaga o'tish
-    footer.innerHTML = `
-      <div class="modal-buttons-grid">
-        <button class="btn btn-warning" onclick="closeModal('modalTableDetail'); startNewOrderForTable(${table.id});">
-          ➕ Taom Qo'shish / O'zgartirish
-        </button>
-        <button class="btn btn-secondary" onclick="openTransferTableModal(${table.id})">
-          🔄 Boshqa Stolga Ko'chirish
-        </button>
-        <button class="btn btn-success" onclick="closeModal('modalTableDetail'); navigateTo('cashier'); selectCashierOrder(${activeOrder.id});">
-          💵 Kassada To'lash
-        </button>
+// Admin panel: buyurtmalar qabul qilingan vaqti bilan
+function admOrdersHtml(f) {
+  const list = ordersFor(f, renderAdmin).filter((o) => inRange(o.createdAt, f) || o.status === "open").sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const oneDay = f.from && f.from === f.to;
+  const when = (d) => (oneDay ? tm(d) : dt(d));
+  return `
+    <div class="card mt mb table-wrap adm-orders" style="padding:0">
+      <div class="card-head adm-head"><h3>${icon("clock")} Buyurtmalar — qabul qilingan vaqti</h3><span class="badge gray">${list.length} ta</span></div>
+      <div class="adm-orders-scroll">
+        <table class="tbl-list">
+          <thead><tr><th>Qabul qilindi</th><th>№</th><th>Joy</th><th>Qabul qilgan</th><th>Taomlar</th><th class="r">Summa</th><th>Holat</th><th>Yopildi</th><th class="r">Davomiyligi</th><th></th></tr></thead>
+          <tbody>${list.map((o) => {
+            const st = orderStatus(o);
+            const end = o.paidAt || o.cancelledAt;
+            const dur = Math.max(0, Math.round((new Date(end || Date.now()) - new Date(o.createdAt)) / 60000));
+            return `<tr>
+              <td><b>${when(o.createdAt)}</b></td>
+              <td>#${o.no}</td>
+              <td>${esc(placeName(o.hall, o.table))}</td>
+              <td>${esc(o.createdBy || "—")}</td>
+              <td class="muted adm-items" title="${esc(o.items.map((i) => `${i.qty}× ${i.name}`).join(", "))}">${o.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(", ")}</td>
+              <td class="r"><b>${money(calc(o).total)}</b></td>
+              <td><span class="badge ${st[1]}">${st[0]}</span></td>
+              <td>${end ? when(end) : `<span class="muted">ochiq</span>`}</td>
+              <td class="r">${dur} daq</td>
+              <td class="r"><button class="btn sm" onclick="showReceipt(${o.id})" title="Ko'rish">${icon("eye")}</button></td>
+            </tr>`;
+          }).join("") || `<tr><td colspan="10"><div class="empty-state small"><span>Bu davrda buyurtma yo'q</span></div></td></tr>`}</tbody>
+        </table>
       </div>
-    `;
-  }
-
-  openModal("modalTableDetail");
+    </div>`;
 }
 
-// 13. STOL BUYURTMASINI O'ZGARTIRISH / KO'CHIRISH (1-stol -> 5-stol)
-let currentTransferSourceTableId = null;
-
-function openTransferTableModal(fromTableId) {
-  closeModal("modalTableDetail");
-  currentTransferSourceTableId = fromTableId;
-
-  const fromTable = STATE.tables.find(t => t.id === fromTableId);
-  document.getElementById("transferFromTableName").textContent = fromTable ? fromTable.name : `${fromTableId}-stol`;
-
-  const select = document.getElementById("selectTransferTargetTable");
-  select.innerHTML = "";
-
-  // Faqat bo'sh stollarni ko'rsatamiz
-  const vacantTables = STATE.tables.filter(t => t.status === "vacant");
-  if (vacantTables.length === 0) {
-    select.innerHTML = `<option value="">Barcha boshqa stollar band!</option>`;
-    document.getElementById("btnConfirmTransferTable").disabled = true;
-  } else {
-    document.getElementById("btnConfirmTransferTable").disabled = false;
-    vacantTables.forEach(t => {
-      const opt = document.createElement("option");
-      opt.value = t.id;
-      opt.textContent = `${t.name} (Bo'sh)`;
-      select.appendChild(opt);
-    });
-  }
-
-  openModal("modalTransferTable");
+function printDishSales() {
+  const f = F.adm;
+  const d = dishSales(f);
+  const rows = d.rows.sort((a, b) => b.qty - a.qty);
+  printHtml(`<div class="rc">
+    <div class="rc-c"><b class="rc-name">${esc(S.settings.name)}</b><div>Sotilgan taomlar</div><div>${esc(rangeLabel(f))}</div></div><hr>
+    ${rows.map((r) => `<div class="rc-l"><span>${esc(r.name)} × ${r.qty}</span><span>${fmt(r.sum)}</span></div>`).join("") || `<div class="rc-c">Sotuv yo'q</div>`}
+    <hr>
+    <div class="rc-l"><span>Cheklar</span><span>${d.paid.length}</span></div>
+    <div class="rc-l rc-total"><span>TUSHUM</span><span>${money(d.revenue)}</span></div>
+    <hr><div class="rc-c">${dt(nowIso())}</div>
+  </div>`, { ...S.settings.printer, copies: 1 });
 }
 
-function confirmTransferTable() {
-  const targetSelect = document.getElementById("selectTransferTargetTable");
-  const targetTableId = Number(targetSelect.value);
-
-  if (!targetTableId) {
-    alert("Iltimos, ko'chirish uchun bo'sh stolni tanlang!");
-    return;
-  }
-
-  const fromTable = STATE.tables.find(t => t.id === currentTransferSourceTableId);
-  const targetTable = STATE.tables.find(t => t.id === targetTableId);
-
-  if (!fromTable || !targetTable || !fromTable.currentOrderId) {
-    alert("Xatolik: Stol yoki buyurtma topilmadi!");
-    return;
-  }
-
-  const order = STATE.orders.find(o => o.id === fromTable.currentOrderId);
-  if (order) {
-    order.tableId = targetTable.id;
-    order.tableName = targetTable.name;
-  }
-
-  targetTable.status = fromTable.status;
-  targetTable.currentOrderId = fromTable.currentOrderId;
-
-  fromTable.status = "vacant";
-  fromTable.currentOrderId = null;
-
-  saveState();
-  closeModal("modalTransferTable");
-
-  alert(`✅ Buyurtma muvaffaqiyatli ${fromTable.name}dan ${targetTable.name}ga ko'chirildi!`);
-  renderTablesView();
+// ---------------------------------------------------------------------
+// 9b. OSHXONA PANELI (oshpaz ekrani)
+// ---------------------------------------------------------------------
+function renderKitchen() {
+  const cols = [["new", "Yangi", "blue"], ["cooking", "Tayyorlanmoqda", "orange"], ["ready", "Tayyor — olib keting", "green"]];
+  const next = { new: ["cooking", "Boshlash", "primary"], cooking: ["ready", "Tayyor", "orange"], ready: ["served", "Berildi", "green"] };
+  $("content").innerHTML = `
+    <div class="page-head"><div><h2>Oshxona</h2><p class="muted">Kassadan yuborilgan buyurtmalar shu yerga tushadi. Tugmani bosib holatini o'zgartiring.</p></div></div>
+    <div class="kds">
+      ${cols.map(([st, label, color]) => {
+        const list = S.tickets.filter((k) => k.status === st).sort((a, b) => a.id - b.id);
+        return `<div class="kds-col">
+          <div class="kds-head ${color}"><b>${label}</b><span>${list.length}</span></div>
+          ${list.map((k) => `
+            <div class="ticket ${st} ${st !== "ready" && mins(k.createdAt) >= 20 ? "late" : ""}">
+              <div class="ticket-top"><b>${esc(placeName(k.hall, k.table))}</b><span class="muted">#${k.orderNo} · ${tm(k.createdAt)} · ${mins(k.createdAt)} daq</span></div>
+              <ul>${k.items.map((i) => `<li><b>${i.qty}×</b> ${esc(i.name)}</li>`).join("")}</ul>
+              ${k.note ? `<div class="ticket-note">💬 ${esc(k.note)}</div>` : ""}
+              <button class="btn ${next[st][2]} full" onclick="setTicket(${k.id},'${next[st][0]}')">${next[st][1]}</button>
+            </div>`).join("") || `<div class="empty-state small"><span>Bo'sh</span></div>`}
+        </div>`;
+      }).join("")}
+    </div>`;
 }
 
-// ================= 14. SAHIFA: 6. MENU (ADMIN TAOMLAR BOSHQARUVI) =================
-function renderAdminMenuView() {
-  const tbody = document.getElementById("menuAdminTableBody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-
-  // Kategoriya filtri dropdownini to'ldirish
-  const catSelect = document.getElementById("selectAdminMenuCategory");
-  if (catSelect && catSelect.children.length <= 1) {
-    STATE.categories.forEach(c => {
-      const opt = document.createElement("option");
-      opt.value = c.id;
-      opt.textContent = `${c.icon} ${c.name}`;
-      catSelect.appendChild(opt);
-    });
-  }
-
-  const query = (document.getElementById("inputAdminMenuSearch")?.value || "").toLowerCase().trim();
-  const selectedCat = document.getElementById("selectAdminMenuCategory")?.value || "all";
-  const selectedStatus = document.getElementById("selectAdminMenuStatus")?.value || "all";
-
-  let filtered = [...STATE.products];
-
-  if (selectedCat !== "all") {
-    filtered = filtered.filter(p => p.categoryId === selectedCat);
-  }
-
-  if (selectedStatus === "available") {
-    filtered = filtered.filter(p => p.isAvailable !== false);
-  } else if (selectedStatus === "unavailable") {
-    filtered = filtered.filter(p => p.isAvailable === false);
-  }
-
-  if (query) {
-    filtered = filtered.filter(p => p.name.toLowerCase().includes(query));
-  }
-
-  if (filtered.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Taomlar topilmadi</td></tr>`;
-    return;
-  }
-
-  filtered.forEach(p => {
-    const cat = STATE.categories.find(c => c.id === p.categoryId);
-    const catName = cat ? `${cat.icon} ${cat.name}` : p.categoryId;
-
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td style="font-size: 24px; text-align: center;">${p.icon || "🍲"}</td>
-      <td>
-        <strong>${p.name}</strong>
-        ${p.description ? `<br><small class="text-muted">${p.description}</small>` : ""}
-      </td>
-      <td><span class="badge">${catName}</span></td>
-      <td><strong>${formatMoney(p.price)}</strong></td>
-      <td>
-        <button class="btn btn-xs ${p.isAvailable !== false ? 'btn-success' : 'btn-secondary'}" onclick="toggleProductAvailability(${p.id})">
-          ${p.isAvailable !== false ? '🟢 Mavjud' : '⚪ Mavjud emas'}
-        </button>
-      </td>
-      <td style="text-align: center;">
-        <button class="btn btn-outline btn-xs" onclick="openEditProductModal(${p.id})">✏️ Tahrirlash</button>
-        <button class="btn btn-text text-danger btn-xs" onclick="deleteProduct(${p.id})">🗑️</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
+function setTicket(id, status) {
+  act("ticket.set", { id, status });
 }
 
-function toggleProductAvailability(prodId) {
-  const prod = STATE.products.find(p => p.id === prodId);
-  if (!prod) return;
-  prod.isAvailable = !prod.isAvailable;
-  saveState();
-  renderAdminMenuView();
+// ---------------------------------------------------------------------
+// 10. MENYU (kategoriyalar va taomlar)
+// ---------------------------------------------------------------------
+let dishCat = "all";
+let dishSearch = "";
+
+function renderMenu() {
+  const q = dishSearch.trim().toLowerCase();
+  if (dishCat !== "all" && !S.categories.some((c) => c.id === dishCat)) dishCat = "all";
+  const list = S.menu.filter((m) => (dishCat === "all" || m.catId === dishCat) && (!q || m.name.toLowerCase().includes(q)));
+  const focused = document.activeElement && document.activeElement.id === "dSearch";
+  $("content").innerHTML = `
+    <div class="page-head">
+      <div><h2>Menyu</h2><p class="muted">${S.menu.length} ta taom. Taomni bosib nomi yoki narxini o'zgartiring.</p></div>
+      <div class="row">
+        <div class="search">${icon("search")}<input id="dSearch" placeholder="Qidirish" value="${esc(dishSearch)}" oninput="dishSearch=this.value;renderMenu()"></div>
+        <button class="btn" onclick="openCatForm()">${icon("plus")} Kategoriya</button>
+        <button class="btn primary" onclick="openDishForm()">${icon("plus")} Taom qo'shish</button>
+      </div>
+    </div>
+    <div class="cat-cards">
+      ${[{ id: "all", name: "Hammasi" }, ...S.categories].map((c) => `
+        <button class="cat-card ${dishCat === c.id ? "active" : ""}" onclick="dishCat='${c.id}';renderMenu()">
+          <span class="avatar sm soft">${c.id === "all" ? icon("grid") : esc(initials(c.name))}</span>
+          <span><b>${esc(c.name)}</b><small>${S.menu.filter((m) => c.id === "all" || m.catId === c.id).length} ta taom</small></span>
+        </button>`).join("")}
+      ${dishCat !== "all" ? `<span class="cat-tools">
+        <button class="btn sm" onclick="openCatForm('${dishCat}')">${icon("edit")} Nomini o'zgartirish</button>
+        <button class="btn sm red" onclick="deleteCat('${dishCat}')">${icon("trash")} O'chirish</button></span>` : ""}
+    </div>
+    <div class="dish-grid">
+      ${list.map((m) => {
+        return `<button class="dish-card ${m.available ? "" : "off"}" onclick="openDishForm(${m.id})">
+          <em class="dish-price">${money(m.price)}</em>
+          <b>${esc(m.name)}</b>
+          <small>${esc((S.categories.find((c) => c.id === m.catId) || { name: "—" }).name)}${m.available ? "" : " · mavjud emas"}</small>
+        </button>`;
+      }).join("") || `<div class="empty-state"><b>Taom topilmadi</b></div>`}
+    </div>`;
+  if (focused) { const i = $("dSearch"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
 }
 
-function openAddProductModal() {
-  document.getElementById("modalProductTitle").textContent = "➕ Yangi Taom Qo'shish";
-  document.getElementById("prodEditId").value = "";
-  document.getElementById("prodName").value = "";
-  document.getElementById("prodPrice").value = "";
-  document.getElementById("prodIcon").value = "🍲";
-  document.getElementById("prodDescription").value = "";
-  document.getElementById("prodStatus").value = "available";
-
-  // Kategoriya dropdown
-  const catSelect = document.getElementById("prodCategory");
-  catSelect.innerHTML = "";
-  STATE.categories.forEach(c => {
-    const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = `${c.icon} ${c.name}`;
-    catSelect.appendChild(opt);
-  });
-
-  openModal("modalProduct");
+function openCatForm(id) {
+  const c = S.categories.find((x) => x.id === id) || { name: "" };
+  openModal(`
+    <div class="modal-title"><h2>${id ? "Kategoriyani tahrirlash" : "Yangi kategoriya"}</h2></div>
+    <div class="form"><label>Nomi</label><input id="cName" value="${esc(c.name)}" onkeydown="if(event.key==='Enter')saveCat('${id || ""}')"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Bekor qilish</button>
+      <button class="btn primary" onclick="saveCat('${id || ""}')">Saqlash</button>
+    </div>`, "sm");
 }
 
-function openEditProductModal(prodId) {
-  const prod = STATE.products.find(p => p.id === prodId);
-  if (!prod) return;
-
-  document.getElementById("modalProductTitle").textContent = "✏️ Taomni Tahrirlash";
-  document.getElementById("prodEditId").value = prod.id;
-  document.getElementById("prodName").value = prod.name;
-  document.getElementById("prodPrice").value = prod.price;
-  document.getElementById("prodIcon").value = prod.icon || "🍲";
-  document.getElementById("prodDescription").value = prod.description || "";
-  document.getElementById("prodStatus").value = prod.isAvailable !== false ? "available" : "unavailable";
-
-  const catSelect = document.getElementById("prodCategory");
-  catSelect.innerHTML = "";
-  STATE.categories.forEach(c => {
-    const opt = document.createElement("option");
-    opt.value = c.id;
-    opt.textContent = `${c.icon} ${c.name}`;
-    if (c.id === prod.categoryId) opt.selected = true;
-    catSelect.appendChild(opt);
-  });
-
-  openModal("modalProduct");
+// Modal oynadagi saqlash: muvaffaqiyatli bo'lsa oyna yopiladi, xato bo'lsa ochiq qoladi
+async function actAndClose(type, payload) {
+  if (await act(type, payload)) closeModal();
 }
 
-function saveProduct() {
-  const editId = document.getElementById("prodEditId").value;
-  const name = document.getElementById("prodName").value.trim();
-  const price = Number(document.getElementById("prodPrice").value);
-  const categoryId = document.getElementById("prodCategory").value;
-  const icon = document.getElementById("prodIcon").value.trim() || "🍲";
-  const description = document.getElementById("prodDescription").value.trim();
-  const isAvailable = document.getElementById("prodStatus").value === "available";
-
-  if (!name) {
-    alert("Iltimos, taom nomini kiriting!");
-    return;
-  }
-  if (!price || price <= 0) {
-    alert("Narx 0 dan katta bo'lishi kerak!");
-    return;
-  }
-
-  if (editId) {
-    // Tahrirlash
-    const p = STATE.products.find(item => item.id === Number(editId));
-    if (p) {
-      p.name = name;
-      p.price = price;
-      p.categoryId = categoryId;
-      p.icon = icon;
-      p.description = description;
-      p.isAvailable = isAvailable;
-    }
-  } else {
-    // Yangi qo'shish
-    const newProduct = {
-      id: Date.now(),
-      name,
-      price,
-      categoryId,
-      icon,
-      description,
-      isAvailable
-    };
-    STATE.products.push(newProduct);
-  }
-
-  saveState();
-  closeModal("modalProduct");
-  renderAdminMenuView();
-  alert("Taom muvaffaqiyatli saqlandi!");
+function saveCat(id) {
+  const name = $("cName").value.trim();
+  if (!name) return toast("Nomini kiriting", "error");
+  actAndClose("cat.save", { id: id || null, name });
 }
 
-function deleteProduct(prodId) {
-  if (!confirm("Haqiqatan ham ushbu taomni o'chirmoqchimisiz?")) return;
-  STATE.products = STATE.products.filter(p => p.id !== prodId);
-  saveState();
-  renderAdminMenuView();
+function deleteCat(id) {
+  const c = S.categories.find((x) => x.id === id);
+  if (!c) return;
+  if (S.menu.some((m) => m.catId === id)) return toast(`"${c.name}" ichida taomlar bor. Avval ularni boshqa kategoriyaga o'tkazing.`, "error");
+  if (!confirm(`"${c.name}" kategoriyasi o'chirilsinmi?`)) return;
+  act("cat.delete", { id });
 }
 
-// ================= 15. SAHIFA: 7. KATEGORIYALAR =================
-function renderCategoriesView() {
-  const tbody = document.getElementById("categoriesTableBody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-
-  STATE.categories.forEach(cat => {
-    const count = STATE.products.filter(p => p.categoryId === cat.id).length;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td style="font-size: 24px; text-align: center;">${cat.icon || "📂"}</td>
-      <td><strong>${cat.name}</strong></td>
-      <td><code>${cat.id}</code></td>
-      <td><span class="badge">${count} ta taom</span></td>
-      <td style="text-align: center;">
-        <button class="btn btn-outline btn-xs" onclick="openEditCategoryModal('${cat.id}')">✏️</button>
-        <button class="btn btn-text text-danger btn-xs" onclick="deleteCategory('${cat.id}')">🗑️</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
+function openDishForm(id) {
+  if (!S.categories.length) return toast("Avval kategoriya qo'shing", "warn");
+  const m = S.menu.find((x) => x.id === id) || { name: "", catId: dishCat !== "all" ? dishCat : S.categories[0].id, price: "", available: true };
+  openModal(`
+    <div class="modal-title"><h2>${id ? "Taomni tahrirlash" : "Yangi taom"}</h2></div>
+    <div class="form">
+      <label>Nomi</label><input id="dName" value="${esc(m.name)}">
+      <div class="form-grid">
+        <div><label>Kategoriya</label><select id="dCat">${S.categories.map((c) => `<option value="${c.id}" ${c.id === m.catId ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></div>
+        <div><label>Narxi (so'm)</label><input id="dPrice" type="number" min="0" value="${m.price}"></div>
+      </div>
+      <label class="chk"><input type="checkbox" id="dAvail" ${m.available !== false ? "checked" : ""}><span><b>Sotuvda bor</b><small>Belgini olib tashlasangiz, taom kassada vaqtincha yopiladi</small></span></label>
+    </div>
+    <div class="modal-actions">
+      ${id ? `<button class="btn red" onclick="deleteDish(${id})">${icon("trash")} O'chirish</button>` : ""}
+      <button class="btn" onclick="closeModal()">Bekor qilish</button>
+      <button class="btn primary" onclick="saveDish(${id || 0})">Saqlash</button>
+    </div>`);
 }
 
-function openAddCategoryModal() {
-  document.getElementById("modalCategoryTitle").textContent = "➕ Yangi Kategoriya";
-  document.getElementById("catEditId").value = "";
-  document.getElementById("catName").value = "";
-  document.getElementById("catIcon").value = "📂";
-  openModal("modalCategory");
+function saveDish(id) {
+  const name = $("dName").value.trim();
+  const price = Number($("dPrice").value);
+  if (!name) return toast("Taom nomini kiriting", "error");
+  if (!(price > 0)) return toast("Narxni to'g'ri kiriting", "error");
+  actAndClose("dish.save", { id: id || null, name, price, catId: $("dCat").value, available: $("dAvail").checked });
 }
 
-function openEditCategoryModal(catId) {
-  const cat = STATE.categories.find(c => c.id === catId);
-  if (!cat) return;
-  document.getElementById("modalCategoryTitle").textContent = "✏️ Kategoriyani Tahrirlash";
-  document.getElementById("catEditId").value = cat.id;
-  document.getElementById("catName").value = cat.name;
-  document.getElementById("catIcon").value = cat.icon || "📂";
-  openModal("modalCategory");
+function deleteDish(id) {
+  const m = S.menu.find((x) => x.id === id);
+  if (!m || !confirm(`"${m.name}" menyudan o'chirilsinmi?`)) return;
+  actAndClose("dish.delete", { id });
 }
 
-function saveCategory() {
-  const editId = document.getElementById("catEditId").value;
-  const name = document.getElementById("catName").value.trim();
-  const icon = document.getElementById("catIcon").value.trim() || "📂";
-
-  if (!name) {
-    alert("Iltimos, kategoriya nomini kiriting!");
-    return;
-  }
-
-  if (editId) {
-    const cat = STATE.categories.find(c => c.id === editId);
-    if (cat) {
-      cat.name = name;
-      cat.icon = icon;
-    }
-  } else {
-    const newId = name.toLowerCase().replace(/[^a-z0-9]/g, "") || ("cat_" + Date.now());
-    STATE.categories.push({ id: newId, name, icon });
-  }
-
-  saveState();
-  closeModal("modalCategory");
-  renderCategoriesView();
+// ---------------------------------------------------------------------
+// 11. SOZLAMALAR
+// ---------------------------------------------------------------------
+function renderSettings() {
+  const st = S.settings;
+  $("content").innerHTML = `
+    <div class="page-head"><div><h2>Sozlamalar</h2><p class="muted">Restoran ma'lumotlari, xodimlar, chek printer va zaxira nusxa</p></div></div>
+    <div class="grid-2" style="align-items:start">
+      <div class="card">
+        <div class="card-head"><h3>Restoran</h3></div>
+        <div class="form">
+          <label>Restoran nomi</label><input id="sName" value="${esc(st.name)}">
+          <label>Telefon</label><input id="sPhone" value="${esc(st.phone)}">
+          <label>Manzil</label><input id="sAddr" value="${esc(st.address)}">
+        </div>
+        <button class="btn primary mt" onclick="saveSettings()">Saqlash</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>${icon("users")} Xodimlar va PIN kodlar</h3><button class="btn sm" onclick="openStaffForm()">${icon("plus")} Xodim</button></div>
+        <table class="tbl-list">
+          <thead><tr><th>Ism</th><th>Rol</th><th class="r"></th></tr></thead>
+          <tbody>${S.staff.map((u) => `<tr>
+            <td><div class="name-cell"><span class="avatar sm">${esc(initials(u.name))}</span><b>${esc(u.name)}</b></div></td>
+            <td><span class="badge ${{ admin: "purple", kassir: "blue", oshpaz: "orange" }[u.role]}">${ROLES[u.role]}</span></td>
+            <td class="r nowrap">
+              <button class="btn sm" onclick="openStaffForm(${u.id})" title="Tahrirlash">${icon("edit")}</button>
+              ${u.id !== me.id ? `<button class="btn sm red" onclick="deleteStaff(${u.id})" title="O'chirish">${icon("trash")}</button>` : ""}
+            </td></tr>`).join("")}</tbody>
+        </table>
+        <p class="muted mt">Admin — Admin panel, Oshxona, Stollar, Menyu, Buyurtmalar, Sozlamalar. Kassir — Kassa, Buyurtmalar. Oshpaz — faqat Oshxona.</p>
+      </div>
+    </div>
+    <div class="card mt">
+      <div class="card-head"><h3>Ma'lumotlar</h3></div>
+        <div class="row">
+          <button class="btn" onclick="exportData()">${icon("download")} Zaxira nusxa yuklab olish</button>
+          <button class="btn red" onclick="resetAll()">Barchasini tozalash</button>
+        </div>
+    </div>
+    ${printerCard()}`;
+  updatePrinterPreview();
 }
 
-function deleteCategory(catId) {
-  if (!confirm("Ushbu kategoriyani o'chirmoqchimisiz?")) return;
-  STATE.categories = STATE.categories.filter(c => c.id !== catId);
-  saveState();
-  renderCategoriesView();
+// ---------------------------------------------------------------------
+// 12. STOLLAR (joylar: zal, ko'cha, VIP...)
+// ---------------------------------------------------------------------
+function renderHalls() {
+  $("content").innerHTML = `
+    <div class="page-head">
+      <div><h2>Stollar</h2><p class="muted">Joylar (Zal, Ko'cha, VIP...) va ulardagi stollar soni</p></div>
+      <button class="btn primary" onclick="openHallForm()">${icon("plus")} Joy qo'shish</button>
+    </div>
+    <div class="list-cards">
+      ${S.halls.map((h) => {
+        const open = S.orders.filter((o) => o.status === "open" && o.hall === h.id).length;
+        return `<div class="list-card">
+          <span class="avatar soft">${icon("seat")}</span>
+          <div class="grow"><b>${esc(h.name)}</b><small>Stollar: ${h.count}${h.service ? ` · Xizmat haqi: ${h.service}%` : ""}${open ? ` · ${open} ta ochiq buyurtma` : ""}</small></div>
+          ${can("kassa") ? `<button class="btn sm" onclick="selHall='${h.id}';selTable=null;go('kassa')">${icon("cash")} Kassada ochish</button>` : ""}
+          <button class="btn sm" onclick="openHallForm('${h.id}')" title="Tahrirlash">${icon("edit")}</button>
+          <button class="btn sm red" onclick="deleteHall('${h.id}')" title="O'chirish">${icon("trash")}</button>
+        </div>`;
+      }).join("") || `<div class="empty-state"><b>Joy yo'q</b><span>Kamida bitta joy (masalan, Zal) qo'shing</span></div>`}
+    </div>`;
 }
 
-// ================= 16. SAHIFA: 8. MIJOZLAR =================
-function renderCustomersView() {
-  const tbody = document.getElementById("customersTableBody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-
-  if (STATE.customers.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted">Mijozlar ro'yxati bo'sh</td></tr>`;
-    return;
-  }
-
-  STATE.customers.forEach(cust => {
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><strong>${cust.name}</strong></td>
-      <td>${cust.phone}</td>
-      <td><span class="badge badge-blue">${cust.ordersCount || 0} ta</span></td>
-      <td class="text-green"><strong>${formatMoney(cust.totalSpent || 0)}</strong></td>
-      <td><small>${cust.lastOrderAt ? formatDate(cust.lastOrderAt) : "Hali yo'q"}</small></td>
-      <td style="text-align: center;">
-        <button class="btn btn-outline btn-xs" onclick="openEditCustomerModal(${cust.id})">✏️</button>
-        <button class="btn btn-text text-danger btn-xs" onclick="deleteCustomer(${cust.id})">🗑️</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
+function openHallForm(id) {
+  const h = S.halls.find((x) => x.id === id) || { name: "", count: 10, service: 0 };
+  openModal(`
+    <div class="modal-title"><h2>${id ? "Joyni tahrirlash" : "Yangi joy"}</h2></div>
+    <div class="form">
+      <label>Nomi</label><input id="hName" value="${esc(h.name)}" placeholder="Masalan: Zal, Kabina, Ko'cha, Saboy">
+      <div class="form-grid">
+        <div><label>Stollar soni</label><input id="hCount" type="number" min="0" max="200" value="${h.count}"></div>
+        <div><label>Xizmat haqi (%)</label><input id="hSvc" type="number" min="0" max="100" value="${h.service || 0}"></div>
+      </div>
+      <p class="muted">Xizmat haqi shu joydagi har bir buyurtma summasiga qo'shiladi (masalan, kabina uchun 10%). Saboy uchun odatda 0%.</p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Bekor qilish</button>
+      <button class="btn primary" onclick="saveHall('${id || ""}')">Saqlash</button>
+    </div>`, "sm");
 }
 
-function openAddCustomerModal() {
-  document.getElementById("modalCustomerTitle").textContent = "➕ Yangi Mijoz";
-  document.getElementById("custEditId").value = "";
-  document.getElementById("custName").value = "";
-  document.getElementById("custPhone").value = "+998 ";
-  openModal("modalCustomer");
+function saveHall(id) {
+  const name = $("hName").value.trim();
+  const count = Math.round(Number($("hCount").value));
+  if (!name) return toast("Nomini kiriting", "error");
+  if (!(count >= 0 && count <= 200)) return toast("Stollar soni 0 dan 200 gacha", "error");
+  actAndClose("hall.save", { id: id || null, name, count, service: Number($("hSvc").value) || 0 });
 }
 
-function openEditCustomerModal(custId) {
-  const cust = STATE.customers.find(c => c.id === custId);
-  if (!cust) return;
-  document.getElementById("modalCustomerTitle").textContent = "✏️ Mijozni Tahrirlash";
-  document.getElementById("custEditId").value = cust.id;
-  document.getElementById("custName").value = cust.name;
-  document.getElementById("custPhone").value = cust.phone;
-  openModal("modalCustomer");
+function deleteHall(id) {
+  const h = S.halls.find((x) => x.id === id);
+  if (!h) return;
+  if (S.orders.some((o) => o.status === "open" && o.hall === id)) return toast(`"${h.name}"da ochiq buyurtmalar bor`, "error");
+  if (!confirm(`"${h.name}" o'chirilsinmi?`)) return;
+  act("hall.delete", { id });
 }
 
-function saveCustomer() {
-  const editId = document.getElementById("custEditId").value;
-  const name = document.getElementById("custName").value.trim();
-  const phone = document.getElementById("custPhone").value.trim();
-
-  if (!name || !phone) {
-    alert("Iltimos, ism va telefon raqamini kiriting!");
-    return;
-  }
-
-  if (editId) {
-    const cust = STATE.customers.find(c => c.id === Number(editId));
-    if (cust) {
-      cust.name = name;
-      cust.phone = phone;
-    }
-  } else {
-    STATE.customers.push({
-      id: Date.now(),
-      name,
-      phone,
-      ordersCount: 0,
-      totalSpent: 0,
-      lastOrderAt: null
-    });
-  }
-
-  saveState();
-  closeModal("modalCustomer");
-  renderCustomersView();
-}
-
-function deleteCustomer(custId) {
-  if (!confirm("Ushbu mijozni o'chirmoqchimisiz?")) return;
-  STATE.customers = STATE.customers.filter(c => c.id !== custId);
-  saveState();
-  renderCustomersView();
-}
-
-// ================= 17. SAHIFA: 9. XODIMLAR VA ROLLAR =================
-function renderStaffView() {
-  const tbody = document.getElementById("staffTableBody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-
-  STATE.staff.forEach(user => {
-    const isCurrent = STATE.currentUser && STATE.currentUser.id === user.id;
-    const tr = document.createElement("tr");
-    tr.innerHTML = `
-      <td><strong>${user.name}</strong> ${isCurrent ? '<span class="badge badge-green">Siz</span>' : ''}</td>
-      <td><span class="badge badge-purple">${getRoleDisplayName(user.role)}</span></td>
-      <td>${user.phone || "-"}</td>
-      <td><code>**** (${user.pin})</code></td>
-      <td><span class="badge badge-green">Faol</span></td>
-      <td style="text-align: center;">
-        <button class="btn btn-outline btn-xs" onclick="openEditStaffModal(${user.id})">✏️</button>
-        ${!isCurrent ? `<button class="btn btn-text text-danger btn-xs" onclick="deleteStaff(${user.id})">🗑️</button>` : ''}
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
-}
-
-function openAddStaffModal() {
-  document.getElementById("modalStaffTitle").textContent = "➕ Yangi Xodim Qo'shish";
-  document.getElementById("staffEditId").value = "";
-  document.getElementById("staffName").value = "";
-  document.getElementById("staffRole").value = "waiter";
-  document.getElementById("staffPin").value = "";
-  document.getElementById("staffPhone").value = "+998 ";
-  openModal("modalStaff");
-}
-
-function openEditStaffModal(staffId) {
-  const user = STATE.staff.find(s => s.id === staffId);
-  if (!user) return;
-  document.getElementById("modalStaffTitle").textContent = "✏️ Xodimni Tahrirlash";
-  document.getElementById("staffEditId").value = user.id;
-  document.getElementById("staffName").value = user.name;
-  document.getElementById("staffRole").value = user.role;
-  document.getElementById("staffPin").value = user.pin;
-  document.getElementById("staffPhone").value = user.phone || "";
-  openModal("modalStaff");
-}
-
-function saveStaff() {
-  const editId = document.getElementById("staffEditId").value;
-  const name = document.getElementById("staffName").value.trim();
-  const role = document.getElementById("staffRole").value;
-  const pin = document.getElementById("staffPin").value.trim();
-  const phone = document.getElementById("staffPhone").value.trim();
-
-  if (!name || !pin) {
-    alert("Iltimos, xodim ismi va PIN kodini kiriting!");
-    return;
-  }
-
-  if (editId) {
-    const user = STATE.staff.find(s => s.id === Number(editId));
-    if (user) {
-      user.name = name;
-      user.role = role;
-      user.pin = pin;
-      user.phone = phone;
-    }
-  } else {
-    STATE.staff.push({
-      id: Date.now(),
-      name,
-      role,
-      pin,
-      phone,
-      active: true
-    });
-  }
-
-  saveState();
-  closeModal("modalStaff");
-  renderStaffView();
-}
-
-function deleteStaff(staffId) {
-  if (!confirm("Ushbu xodimni o'chirmoqchimisiz?")) return;
-  STATE.staff = STATE.staff.filter(s => s.id !== staffId);
-  saveState();
-  renderStaffView();
-}
-
-// Rol / Foydalanuvchi almashtirish modali
-function openRoleSwitchModal() {
-  const container = document.getElementById("roleSwitchList");
-  if (!container) return;
-  container.innerHTML = "";
-
-  STATE.staff.forEach(user => {
-    const isCurrent = STATE.currentUser?.id === user.id;
-    const card = document.createElement("div");
-    card.className = `role-switch-item ${isCurrent ? 'active' : ''}`;
-    card.innerHTML = `
-      <div class="rsi-left">
-        <span class="rsi-avatar">${getRoleAvatar(user.role)}</span>
+// ---- Chek va printer sozlamalari ----
+function printerCard() {
+  const c = S.settings.printer;
+  const seg = (id, val, opts) => `<div class="seg" id="${id}">${opts.map(([v, l]) =>
+    `<button type="button" class="${String(v) === String(val) ? "active" : ""}" data-v="${v}" onclick="segPick(this)">${l}</button>`).join("")}</div>`;
+  const chk = (id, on, label, hint) => `<label class="chk"><input type="checkbox" id="${id}" ${on ? "checked" : ""} onchange="updatePrinterPreview()"><span><b>${label}</b>${hint ? `<small>${hint}</small>` : ""}</span></label>`;
+  return `
+    <div class="card mt">
+      <div class="card-head"><h3>${icon("print")} Chek va printer</h3></div>
+      <div class="printer-grid">
+        <div class="form">
+          <div class="form-grid">
+            <div><label>Qog'oz kengligi</label>${seg("pPaper", c.paper, [["58", "58 mm"], ["80", "80 mm"]])}</div>
+            <div><label>Shrift o'lchami</label>${seg("pFont", c.fontSize, [[11, "Kichik"], [12, "O'rta"], [14, "Katta"]])}</div>
+          </div>
+          <div class="form-grid">
+            <div><label>Nusxalar soni</label>${seg("pCopies", c.copies, [[1, "1"], [2, "2"], [3, "3"]])}</div>
+            <div></div>
+          </div>
+          <label>Nom ostidagi qo'shimcha qator</label>
+          <input id="pHeader" value="${esc(c.header)}" placeholder="Masalan: STIR 123456789" oninput="updatePrinterPreview()">
+          <label>Chek oxiridagi yozuv</label>
+          <input id="pFooter" value="${esc(S.settings.receiptFooter)}" oninput="updatePrinterPreview()">
+          <label>Chekda ko'rsatish</label>
+          <div class="chk-row">
+            ${chk("pAddr", c.showAddress, "Manzil")}
+            ${chk("pPhone", c.showPhone, "Telefon")}
+            ${chk("pCashier", c.showCashier, "Kassir")}
+          </div>
+          <label>Avtomatik chop etish</label>
+          ${chk("pAuto", c.autoPrint, "To'lovdan keyin chekni o'zi chiqarsin", "Kassir \"Chek chiqarish\"ni bosishi shart emas")}
+          ${chk("pKitchen", c.kitchenPrint, "Oshxonaga yuborilganda chek ham chiqsin", "Oshxonada alohida printer bo'lsa: narxsiz, stol, taomlar va izoh")}
+          <div class="row mt">
+            <button class="btn primary" onclick="savePrinter()">Saqlash</button>
+            <button class="btn" onclick="testPrint()">${icon("print")} Sinov cheki</button>
+          </div>
+          <div class="print-help">
+            <b>Chekni oynasiz, to'g'ridan-to'g'ri printerga chiqarish</b>
+            <ol>
+              <li>Chek printerni ulang va kompyuterga o'rnating (drayverini o'rnating).</li>
+              <li>Uni <b>asosiy (default) printer</b> qilib belgilang.</li>
+              <li>Dasturni <code>Kafe-Pro.bat</code> (Windows) yoki <code>kassa-chrome.sh</code> (Mac) orqali oching — Chrome chekni so'ramasdan darhol chiqaradi.</li>
+              <li>Birinchi marta oddiy chop etish oynasida qog'oz o'lchamini (${c.paper} mm) va "Chegaralar: Yo'q" ni tanlang.</li>
+            </ol>
+          </div>
+        </div>
         <div>
-          <strong>${user.name}</strong>
-          <small class="text-muted">${getRoleDisplayName(user.role)}</small>
+          <label class="muted">Chek ko'rinishi</label>
+          <div class="receipt-paper preview-paper" id="pPreview"></div>
         </div>
       </div>
-      <button class="btn btn-sm ${isCurrent ? 'btn-success' : 'btn-outline'}">
-        ${isCurrent ? 'Tanlangan' : 'Tanlash'}
-      </button>
-    `;
-
-    card.onclick = () => switchCurrentUser(user);
-    container.appendChild(card);
-  });
-
-  openModal("modalRoleSwitch");
+    </div>`;
 }
 
-function switchCurrentUser(user) {
-  STATE.currentUser = user;
-  saveState();
-  closeModal("modalRoleSwitch");
-  updateHeaderKPIs();
-
-  alert(`Xush kelibsiz, ${user.name}! Siz hozir ${getRoleDisplayName(user.role)} roliga o'tdingiz.`);
-  
-  if (user.role === "chef") {
-    navigateTo("kitchen");
-  } else if (user.role === "waiter") {
-    navigateTo("tables");
-  } else if (user.role === "cashier") {
-    navigateTo("cashier");
-  } else {
-    navigateTo("dashboard");
-  }
+function segPick(btn) {
+  btn.parentElement.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
+  updatePrinterPreview();
 }
 
-// ================= 18. SAHIFA: 10. HISOBOTLAR =================
-function renderReportsView() {
-  const period = STATE.reportPeriod || "today";
+function readPrinterForm() {
+  const segVal = (id) => $(id).querySelector(".active").dataset.v;
+  return {
+    paper: segVal("pPaper"),
+    fontSize: Number(segVal("pFont")),
+    copies: Number(segVal("pCopies")),
+    header: $("pHeader").value.trim(),
+    showAddress: $("pAddr").checked,
+    showPhone: $("pPhone").checked,
+    showCashier: $("pCashier").checked,
+    autoPrint: $("pAuto").checked,
+    kitchenPrint: $("pKitchen").checked
+  };
+}
 
-  // Filterlash
-  const now = new Date();
-  const todayStr = now.toISOString().slice(0, 10);
-  const oneWeekAgo = new Date(now.getTime() - 7 * 86400000).toISOString();
-  const oneMonthAgo = new Date(now.getTime() - 30 * 86400000).toISOString();
+function sampleOrder() {
+  return {
+    no: 125, table: 5, discount: 0, status: "paid", sub: 75000, discountSum: 0, total: 75000,
+    paidAt: nowIso(), cashierName: me ? me.name : "Kassir",
+    items: [{ name: "Osh (Palov)", qty: 2, price: 35000 }, { name: "Ko'k choy", qty: 1, price: 5000 }],
+    payment: { method: "naqd", card: 0, cash: 75000, given: 100000, change: 25000 }
+  };
+}
 
-  let filtered = STATE.orders.filter(o => o.status === "completed");
+function updatePrinterPreview() {
+  if (!$("pPreview")) return;
+  const cfg = readPrinterForm();
+  const el = $("pPreview");
+  el.style.width = cfg.paper === "58" ? "230px" : "320px";
+  el.style.fontSize = cfg.fontSize + "px";
+  el.innerHTML = receiptHtml(sampleOrder(), cfg, { ...S.settings, receiptFooter: $("pFooter").value.trim() });
+}
 
-  if (period === "today") {
-    filtered = filtered.filter(o => o.completedAt && o.completedAt.startsWith(todayStr));
-  } else if (period === "week") {
-    filtered = filtered.filter(o => o.completedAt && o.completedAt >= oneWeekAgo);
-  } else if (period === "month") {
-    filtered = filtered.filter(o => o.completedAt && o.completedAt >= oneMonthAgo);
-  }
+async function savePrinter() {
+  if (await act("printer.save", { printer: readPrinterForm(), receiptFooter: $("pFooter").value.trim() })) toast("Chek sozlamalari saqlandi", "success");
+}
 
-  const totalSales = filtered.reduce((s, o) => s + (o.total || 0), 0);
-  const totalOrders = filtered.length;
-  const avgCheck = totalOrders > 0 ? Math.round(totalSales / totalOrders) : 0;
+function testPrint() {
+  const cfg = readPrinterForm();
+  printHtml(receiptHtml(sampleOrder(), cfg, { ...S.settings, receiptFooter: $("pFooter").value.trim() }), cfg);
+}
 
-  document.getElementById("repPeriodSales").textContent = formatMoney(totalSales);
-  document.getElementById("repPeriodOrders").textContent = `${totalOrders} ta`;
-  document.getElementById("repAverageCheck").textContent = formatMoney(avgCheck);
+async function saveSettings() {
+  const name = $("sName").value.trim();
+  if (!name) return toast("Restoran nomini kiriting", "error");
+  if (await act("settings.save", { name, phone: $("sPhone").value.trim(), address: $("sAddr").value.trim() })) toast("Sozlamalar saqlandi", "success");
+}
 
-  // To'lov turlari bo'yicha tushum
-  const methods = { Naqd: 0, Karta: 0, Click: 0, Payme: 0 };
-  filtered.forEach(o => {
-    const m = o.paymentMethod || "Naqd";
-    methods[m] = (methods[m] || 0) + (o.total || 0);
-  });
-
-  const breakdownBox = document.getElementById("repPaymentBreakdown");
-  if (breakdownBox) {
-    breakdownBox.innerHTML = `
-      <div class="pay-breakdown-row">
-        <span>💵 Naqd pul:</span>
-        <strong>${formatMoney(methods.Naqd)}</strong>
+function openStaffForm(id) {
+  const u = S.staff.find((x) => x.id === id) || { name: "", role: "kassir" };
+  openModal(`
+    <div class="modal-title"><h2>${id ? "Xodimni tahrirlash" : "Yangi xodim"}</h2></div>
+    <div class="form">
+      <label>Ism</label><input id="uName" value="${esc(u.name)}">
+      <div class="form-grid">
+        <div><label>Rol</label><select id="uRole">${Object.entries(ROLES).map(([k, l]) => `<option value="${k}" ${k === u.role ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+        <div><label>PIN (4–6 raqam)</label><input id="uPin" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="${id ? "o'zgarmaydi" : ""}"></div>
       </div>
-      <div class="pay-breakdown-row">
-        <span>💳 Karta (Uzcard/Humo):</span>
-        <strong>${formatMoney(methods.Karta)}</strong>
-      </div>
-      <div class="pay-breakdown-row">
-        <span>📱 Click to'lov:</span>
-        <strong>${formatMoney(methods.Click)}</strong>
-      </div>
-      <div class="pay-breakdown-row">
-        <span>🟢 Payme to'lov:</span>
-        <strong>${formatMoney(methods.Payme)}</strong>
-      </div>
-    `;
-  }
-
-  // Eng ko'p sotilgan taomlar
-  renderTopDishes("repTopDishesList");
+      ${id ? `<p class="muted">PIN kod xavfsizlik uchun ko'rsatilmaydi. O'zgartirish uchun yangisini yozing, bo'sh qoldirsangiz eskisi qoladi.</p>` : ""}
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Bekor qilish</button>
+      <button class="btn primary" onclick="saveStaff(${id || 0})">Saqlash</button>
+    </div>`, "sm");
 }
 
-// ================= 19. SAHIFA: 11. BUYURTMALAR TARIXI =================
-function renderHistoryView() {
-  const tbody = document.getElementById("orderHistoryTableBody");
-  if (!tbody) return;
-  tbody.innerHTML = "";
-
-  const query = (document.getElementById("inputHistorySearch")?.value || "").toLowerCase().trim();
-  const payFilter = document.getElementById("selectHistoryPaymentFilter")?.value || "all";
-
-  let list = [...STATE.orders].reverse();
-
-  if (payFilter !== "all") {
-    list = list.filter(o => o.paymentMethod === payFilter);
-  }
-
-  if (query) {
-    list = list.filter(o =>
-      (o.orderNumber && o.orderNumber.toLowerCase().includes(query)) ||
-      (o.tableName && o.tableName.toLowerCase().includes(query)) ||
-      (o.waiterName && o.waiterName.toLowerCase().includes(query)) ||
-      (o.customerName && o.customerName.toLowerCase().includes(query))
-    );
-  }
-
-  if (list.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="9" class="text-center text-muted">Buyurtmalar tarixi topilmadi</td></tr>`;
-    return;
-  }
-
-  list.forEach(order => {
-    const tr = document.createElement("tr");
-    const dishes = order.items.map(it => `${it.name} (x${it.qty})`).join(", ");
-    tr.innerHTML = `
-      <td><strong>${order.orderNumber}</strong></td>
-      <td><small>${formatDate(order.completedAt || order.createdAt)}</small></td>
-      <td><span class="badge badge-table">${order.tableName}</span></td>
-      <td>${order.waiterName || "Ali"}</td>
-      <td><div class="table-dishes-cell" title="${dishes}">${dishes}</div></td>
-      <td><span class="badge">${order.paymentMethod || "Kutilmoqda"}</span></td>
-      <td><strong>${formatMoney(order.total)}</strong></td>
-      <td><span class="status-chip status-${order.status}">${getOrderStatusLabel(order.status)}</span></td>
-      <td style="text-align: center;">
-        <button class="btn btn-outline btn-xs" onclick="openOrderReceiptHistory(${order.id})" title="Chekni ko'rish">🧾 Chek</button>
-      </td>
-    `;
-    tbody.appendChild(tr);
-  });
+function saveStaff(id) {
+  const name = $("uName").value.trim();
+  const role = $("uRole").value;
+  const pin = $("uPin").value.trim();
+  if (!name) return toast("Ismni kiriting", "error");
+  if ((pin || !id) && !/^\d{4,6}$/.test(pin)) return toast("PIN 4–6 ta raqamdan iborat bo'lsin", "error");
+  if (id && id === me.id && role !== "admin") return toast("O'zingizning admin rolingizni olib tashlay olmaysiz", "error");
+  actAndClose("staff.save", { id: id || null, name, role, pin });
 }
 
-function openOrderReceiptHistory(orderId) {
-  const order = STATE.orders.find(o => o.id === orderId);
-  if (order) showReceiptModal(order);
+function deleteStaff(id) {
+  const u = S.staff.find((x) => x.id === id);
+  if (!u || u.id === me.id) return;
+  if (!confirm(`"${u.name}" o'chirilsinmi?`)) return;
+  act("staff.delete", { id });
 }
 
-// ================= 20. SAHIFA: 12. SOZLAMALAR =================
-function renderSettingsView() {
-  const s = STATE.settings;
-  document.getElementById("setRestName").value = s.restaurantName || "";
-  document.getElementById("setRestPhone").value = s.phone || "";
-  document.getElementById("setRestAddress").value = s.address || "";
-  document.getElementById("setCurrency").value = s.currency || "so'm";
-  document.getElementById("setTableCount").value = s.tableCount || 16;
-  document.getElementById("setServiceCharge").value = s.serviceChargePercent || 10;
-  document.getElementById("setReceiptHeader").value = s.receiptHeader || "";
-  document.getElementById("setReceiptFooter").value = s.receiptFooter || "";
+// To'liq zaxira (barcha buyurtmalar bilan) serverdan yuklab olinadi
+async function exportData() {
+  try {
+    const d = await api("/api/export");
+    const blob = new Blob([JSON.stringify(d, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `kafe-zaxira-${todayYmd()}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  } catch (e) { toast(e.message, "error"); }
 }
 
-function saveSettings() {
-  STATE.settings.restaurantName = document.getElementById("setRestName").value.trim() || DEFAULT_SETTINGS.restaurantName;
-  STATE.settings.phone = document.getElementById("setRestPhone").value.trim();
-  STATE.settings.address = document.getElementById("setRestAddress").value.trim();
-  STATE.settings.currency = document.getElementById("setCurrency").value.trim() || "so'm";
-  
-  const count = Number(document.getElementById("setTableCount").value) || 16;
-  STATE.settings.tableCount = count;
-  
-  STATE.settings.serviceChargePercent = Number(document.getElementById("setServiceCharge").value) || 0;
-  STATE.settings.receiptHeader = document.getElementById("setReceiptHeader").value.trim();
-  STATE.settings.receiptFooter = document.getElementById("setReceiptFooter").value.trim();
-
-  // Agar stollar soni o'zgargan bo'lsa yangilash
-  if (STATE.tables.length !== count) {
-    if (confirm("Stollar soni o'zgardi. Stollar qayta shakllantirilsinmi?")) {
-      STATE.tables = generateDefaultTables(count);
-    }
-  }
-
-  // Header sarlavhasini yangilash
-  document.getElementById("headerRestTitle").textContent = STATE.settings.restaurantName;
-
-  saveState();
-  alert("✅ Sozlamalar muvaffaqiyatli saqlandi!");
-  updateHeaderKPIs();
+async function resetAll() {
+  if (!confirm("DIQQAT! Barcha buyurtmalar, menyu, joylar va xodimlar standart holatga qaytadi. Davom etilsinmi?")) return;
+  if (!confirm("Tozalashdan oldin serverda zaxira nusxa olinadi. Rostdan ham tozalansinmi?")) return;
+  selTable = null;
+  if (await act("data.reset", {})) toast("Ma'lumotlar tozalandi (oldingisi backups/ papkasida)", "warn");
 }
 
-function resetDemoData() {
-  if (confirm("DIQQAT! Barcha buyurtmalar va sozlamalar boshlang'ich namuna holatiga qaytariladi. Davom etasizmi?")) {
-    localStorage.removeItem(STORAGE_KEY);
-    STATE.settings = { ...DEFAULT_SETTINGS };
-    STATE.categories = [...DEFAULT_CATEGORIES];
-    STATE.products = [...DEFAULT_PRODUCTS];
-    STATE.tables = generateDefaultTables(16);
-    STATE.customers = [...DEFAULT_CUSTOMERS];
-    STATE.staff = [...DEFAULT_STAFF];
-    STATE.currentUser = DEFAULT_STAFF[0];
-    STATE.orders = [];
-    seedInitialDemoOrders();
-    saveState();
-    alert("Barcha namuna ma'lumotlar qayta tiklandi!");
-    location.reload();
-  }
-}
+// ---------------------------------------------------------------------
+// 13. Ishga tushirish
+// ---------------------------------------------------------------------
+const VIEWS = {
+  admin: renderAdmin, kassa: renderKassa, kitchen: renderKitchen, halls: renderHalls, menu: renderMenu, orders: renderOrders, settings: renderSettings
+};
 
-// ================= 21. MODALLARNI BOSHQARISH =================
-function openModal(modalId) {
-  const modal = document.getElementById(modalId);
-  if (modal) modal.classList.add("open");
-}
-
-function closeModal(modalId) {
-  const modal = document.getElementById(modalId);
-  if (modal) modal.classList.remove("open");
-}
-
-// ================= 22. EVENT LISTENERS VA BOSHLASH =================
-function setupEventListeners() {
-  // 1. Sidebar navigatsiyasi
-  const navBtns = document.querySelectorAll(".sidebar-nav .nav-item");
-  navBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      const view = btn.getAttribute("data-view");
-      navigateTo(view);
-    });
-  });
-
-  // Toggle sidebar
-  document.getElementById("btnToggleSidebar")?.addEventListener("click", () => toggleSidebar());
-  document.getElementById("btnCollapseSidebar")?.addEventListener("click", () => toggleSidebar(true));
-  document.getElementById("sidebarOverlay")?.addEventListener("click", () => toggleSidebar(true));
-
-  // Header tugmalari
-  document.getElementById("headerHomeLogo")?.addEventListener("click", () => navigateTo("dashboard"));
-  document.getElementById("btnHeadNewOrder")?.addEventListener("click", () => navigateTo("orders"));
-  document.getElementById("btnOpenRoleSwitch")?.addEventListener("click", openRoleSwitchModal);
-  document.getElementById("btnSideSwitchUser")?.addEventListener("click", openRoleSwitchModal);
-
-  // Stollar filtri
-  const tableFilterBtns = document.querySelectorAll("#tableFilters .btn-filter");
-  tableFilterBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      tableFilterBtns.forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      STATE.filterTableStatus = btn.getAttribute("data-filter");
-      renderTablesView();
-    });
-  });
-
-  // Stolni ko'chirish
-  document.getElementById("btnConfirmTransferTable")?.addEventListener("click", confirmTransferTable);
-
-  // Buyurtma (Cart) amallari
-  document.getElementById("btnSendOrderToKitchen")?.addEventListener("click", sendOrderToKitchen);
-  document.getElementById("btnCartClearAll")?.addEventListener("click", () => {
-    if (confirm("Joriy tanlangan barcha taomlarni savatdan tozalashni xohlaysizmi?")) {
-      STATE.currentOrderCart.items = [];
-      renderOrderCart();
-    }
-  });
-
-  document.getElementById("chkCartServiceCharge")?.addEventListener("change", renderOrderCart);
-
-  document.getElementById("btnCartProceedToPay")?.addEventListener("click", () => {
-    sendOrderToKitchen();
-    navigateTo("cashier");
-  });
-
-  document.getElementById("btnSaveOrderDraft")?.addEventListener("click", () => {
-    alert("Buyurtma qoralama sifatida saqlandi.");
-  });
-
-  document.getElementById("orderSelectTable")?.addEventListener("change", (e) => {
-    startNewOrderForTable(Number(e.target.value));
-  });
-
-  document.getElementById("orderSelectCustomer")?.addEventListener("change", (e) => {
-    STATE.currentOrderCart.customerId = e.target.value ? Number(e.target.value) : null;
-  });
-
-  // Qidiruv
-  const searchInput = document.getElementById("inputMenuSearch");
-  if (searchInput) {
-    searchInput.addEventListener("input", (e) => {
-      renderOrderDishesGrid();
-      const clearBtn = document.getElementById("btnSearchClear");
-      if (clearBtn) clearBtn.style.display = e.target.value ? "block" : "none";
-    });
-  }
-  document.getElementById("btnSearchClear")?.addEventListener("click", () => {
-    const input = document.getElementById("inputMenuSearch");
-    if (input) {
-      input.value = "";
-      renderOrderDishesGrid();
-      document.getElementById("btnSearchClear").style.display = "none";
-    }
-  });
-
-  // Oshxona KDS yangilash
-  document.getElementById("btnRefreshKitchen")?.addEventListener("click", renderKitchenView);
-
-  // Kassa naqd hisobi va to'lov
-  document.getElementById("inputCashReceived")?.addEventListener("input", calculateCashChange);
-  const quickCashBtns = document.querySelectorAll(".btn-quick-cash");
-  quickCashBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      const amount = btn.getAttribute("data-amount");
-      const order = STATE.orders.find(o => o.id === STATE.selectedCashierOrderId);
-      const input = document.getElementById("inputCashReceived");
-      if (!input || !order) return;
-
-      if (amount === "exact") {
-        input.value = order.total;
-      } else {
-        input.value = (Number(input.value) || 0) + Number(amount);
-      }
-      calculateCashChange();
-    });
-  });
-
-  document.getElementById("btnExecutePayment")?.addEventListener("click", executePayment);
-
-  // Chek print qilish
-  document.getElementById("btnPrintReceipt")?.addEventListener("click", () => {
-    window.print();
-  });
-
-  // Menu Admin
-  document.getElementById("btnOpenAddProductModal")?.addEventListener("click", openAddProductModal);
-  document.getElementById("btnSaveProduct")?.addEventListener("click", saveProduct);
-  document.getElementById("inputAdminMenuSearch")?.addEventListener("input", renderAdminMenuView);
-  document.getElementById("selectAdminMenuCategory")?.addEventListener("change", renderAdminMenuView);
-  document.getElementById("selectAdminMenuStatus")?.addEventListener("change", renderAdminMenuView);
-
-  // Kategoriya Admin
-  document.getElementById("btnOpenAddCategoryModal")?.addEventListener("click", openAddCategoryModal);
-  document.getElementById("btnSaveCategory")?.addEventListener("click", saveCategory);
-
-  // Mijoz Admin
-  document.getElementById("btnOpenAddCustomerModal")?.addEventListener("click", openAddCustomerModal);
-  document.getElementById("btnSaveCustomer")?.addEventListener("click", saveCustomer);
-
-  // Xodim Admin
-  document.getElementById("btnOpenAddStaffModal")?.addEventListener("click", openAddStaffModal);
-  document.getElementById("btnSaveStaff")?.addEventListener("click", saveStaff);
-
-  // Izoh modali
-  document.getElementById("btnSaveItemNote")?.addEventListener("click", saveItemNote);
-
-  // Hisobot filtrlari
-  const repBtns = document.querySelectorAll(".report-date-filters .btn-filter");
-  repBtns.forEach(btn => {
-    btn.addEventListener("click", () => {
-      repBtns.forEach(b => b.classList.remove("active"));
-      btn.classList.add("active");
-      STATE.reportPeriod = btn.getAttribute("data-period");
-      renderReportsView();
-    });
-  });
-
-  // Tarix qidiruvi
-  document.getElementById("inputHistorySearch")?.addEventListener("input", renderHistoryView);
-  document.getElementById("selectHistoryPaymentFilter")?.addEventListener("change", renderHistoryView);
-
-  // Sozlamalar
-  document.getElementById("btnSaveSettings")?.addEventListener("click", saveSettings);
-  document.getElementById("btnResetDemoData")?.addEventListener("click", resetDemoData);
-
-  // Jonli soat
-  setInterval(() => {
-    const el = document.getElementById("liveClock");
-    if (el) {
-      const now = new Date();
-      el.textContent = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-    }
-  }, 1000);
-}
-
-// Global qilish (HTML inline onclick-lar uchun)
-window.navigateTo = navigateTo;
-window.closeModal = closeModal;
-window.openModal = openModal;
-window.openTableDetailModal = openTableDetailModal;
-window.openTransferTableModal = openTransferTableModal;
-window.startNewOrderForTable = startNewOrderForTable;
-window.updateCartItemQty = updateCartItemQty;
-window.removeCartItem = removeCartItem;
-window.openItemNoteModal = openItemNoteModal;
-window.setQuickNote = setQuickNote;
-window.changeKitchenOrderStatus = changeKitchenOrderStatus;
-window.selectCashierOrder = selectCashierOrder;
-window.toggleProductAvailability = toggleProductAvailability;
-window.openEditProductModal = openEditProductModal;
-window.deleteProduct = deleteProduct;
-window.openEditCategoryModal = openEditCategoryModal;
-window.deleteCategory = deleteCategory;
-window.openEditCustomerModal = openEditCustomerModal;
-window.deleteCustomer = deleteCustomer;
-window.openEditStaffModal = openEditStaffModal;
-window.deleteStaff = deleteStaff;
-window.openOrderReceiptHistory = openOrderReceiptHistory;
-window.openOrderFromDashboard = openOrderFromDashboard;
-
-// ================= 23. BOSHLANG'ICH YUKLANISH =================
-window.addEventListener("DOMContentLoaded", () => {
-  loadState();
-  setupEventListeners();
-  updateHeaderKPIs();
-  navigateTo("dashboard");
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  if (modalOpen()) closeModal();
+  else if (me && view === "kassa" && selTable && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) backToTables();
 });
+
+applySidebar();
+setInterval(() => { if (me) tickClock(); }, 1000);
+setInterval(poll, 2500);
+
+load();
