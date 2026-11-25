@@ -670,3 +670,64 @@ a { color: var(--primary); }
 .adm-orders-scroll { max-height: 340px; overflow: auto; }
 .adm-orders thead th { position: sticky; top: 0; z-index: 1; }
 .adm-items { max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Ofitsiant paneli: to'lov qatori yo'q */
+.kassa.order-mode.waiter { grid-template-rows: auto minmax(0, 1fr); }
+.waiter-hint { text-align: center; margin-top: 8px; }
+/* Ofitsiant: buyurtmadagi xodim va "Mening pulim" */
+.waiter-row { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-bottom: 1px solid var(--border); font-size: 14px; color: var(--muted); }
+.waiter-row svg.i { width: 16px; height: 16px; }
+.waiter-row b { color: var(--text); }
+.waiter-row select { width: auto; flex: 1; padding: 6px 8px; font-size: 14px; }
+.mine { display: grid; grid-template-columns: 1.3fr 1fr 1fr; gap: 12px; padding: 14px 16px; }
+.mine-item span { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); font-weight: 600; }
+.mine-item span svg.i { width: 16px; height: 16px; }
+.mine-item b { display: block; font-size: 20px; margin-top: 2px; }
+.mine-item small { color: var(--muted); font-size: 12px; }
+.mine-item.main b { color: var(--green-2); font-size: 26px; }
+.adm-note { padding: 0 16px 14px; }
+@media (max-width: 720px) { .mine { grid-template-columns: 1fr 1fr; } .mine-item.main { grid-column: 1 / -1; } }
+/* Hisob cheki va bo'lib to'lash */
+.foot-btns { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.foot-btns .btn.big { width: auto; }
+.bill-btn { white-space: nowrap; }
+.rc-bill { font-weight: 800; letter-spacing: .04em; margin-bottom: 4px; }
+.pm.split-pm { border-style: dashed; }
+.split-list { max-height: 46vh; overflow: auto; margin: 12px 0; border: 1px solid var(--border); border-radius: 12px; }
+.split-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.split-row:last-child { border-bottom: 0; }
+.split-row.on { background: var(--green-l); }
+.split-row b { display: block; }
+.split-row small { color: var(--muted); font-size: 12px; }
+.split-foot { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; align-items: start; }
+.split-even { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; color: var(--muted); margin-top: 10px; background: var(--bg); padding: 8px 10px; border-radius: 10px; }
+.split-even input { width: 64px; padding: 5px 8px; }
+.split-given { display: block; margin-top: 10px; }
+.split-given input { margin-top: 4px; }
+@media (max-width: 720px) { .split-foot { grid-template-columns: 1fr; } .foot-btns { grid-template-columns: 1fr; } }
+/* Stolni almashtirish */
+.move-halls { margin: 10px 0 14px; flex-wrap: wrap; }
+.move-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 8px; }
+.move-t { padding: 12px 6px; border: 2px solid var(--green); background: var(--green-l); border-radius: 12px; font-size: 20px; font-weight: 800; display: flex; flex-direction: column; align-items: center; }
+.move-t small { font-size: 11px; font-weight: 600; color: var(--green-2); }
+.move-t:hover:not(:disabled) { background: var(--green); color: #fff; }
+.move-t:hover:not(:disabled) small { color: #fff; }
+.move-t.busy { border-color: var(--border); background: #f1f3f7; color: var(--muted); }
+.move-t.busy small { color: var(--muted); }
+/* Oshxona cheki */
+.ticket-btns { display: grid; grid-template-columns: 1fr auto; gap: 6px; }
+.kprint-at { display: flex; flex-direction: column; gap: 6px; margin: 8px 0 4px 28px; }
+.kprint-at small { font-size: 12px; line-height: 1.4; }
+/* Ofitsiantga: oshxonada tayyor buyurtmalar */
+.ready-dock { position: fixed; right: 16px; bottom: 16px; z-index: 40; width: 340px; max-width: calc(100vw - 32px); max-height: 70vh; overflow: auto;
+  background: #fff; border: 2px solid var(--purple); border-radius: 16px; box-shadow: var(--shadow-lg); padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.ready-head { display: flex; align-items: center; gap: 8px; font-weight: 800; color: var(--purple); }
+.ready-head em { margin-left: auto; font-style: normal; background: var(--purple); color: #fff; border-radius: 999px; padding: 1px 9px; font-size: 13px; animation: pulse 1.2s ease-in-out infinite; }
+.ready-card { background: var(--purple-l); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; }
+.ready-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.ready-top b { font-size: 16px; }
+.ready-items { font-size: 14px; }
+.ready-w { font-size: 12px; }
+.ticket-waiter { display: flex; align-items: center; gap: 6px; font-size: 13px; margin-bottom: 10px; color: var(--muted); }
+.ticket-waiter svg.i { width: 15px; height: 15px; }
+.ticket-waiter b { color: var(--text); }
+.ticket-waiter.ready { background: var(--green-l); padding: 6px 8px; border-radius: 8px; color: var(--green-2); }

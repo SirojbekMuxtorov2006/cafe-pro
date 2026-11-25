@@ -7,7 +7,7 @@
   if (typeof module === "object" && module.exports) module.exports = factory();
   else root.Shared = factory();
 })(typeof self !== "undefined" ? self : this, function () {
-  const ROLES = { admin: "Admin", kassir: "Kassir", oshpaz: "Oshpaz" };
+  const ROLES = { admin: "Admin", kassir: "Kassir", ofitsiant: "Ofitsiant", oshpaz: "Oshxona" };
   const PAY_LABEL = { naqd: "Naqd pul", karta: "Karta", aralash: "Aralash" };
 
   const nextId = (arr) => arr.reduce((m, x) => Math.max(m, Number(x.id) || 0), 0) + 1;
@@ -16,44 +16,64 @@
     return {
       categories: [
         { id: "c1", name: "Suyuq ovqatlar" },
-        { id: "c2", name: "Qattiq ovqatlar" },
-        { id: "c3", name: "Ichimliklar" }
+        { id: "c2", name: "Oshlar" },
+        { id: "c3", name: "Qattiq ovqatlar" },
+        { id: "c4", name: "Xamir taomlar" },
+        { id: "c5", name: "Shashliklar" },
+        { id: "c6", name: "Salatlar" },
+        { id: "c7", name: "Nonlar" },
+        { id: "c8", name: "Shirinliklar" },
+        { id: "c9", name: "Ichimliklar" }
       ],
       menu: [
         { id: 1, name: "Sho'rva", catId: "c1", price: 30000 },
         { id: 2, name: "Qaynatma sho'rva", catId: "c1", price: 32000 },
         { id: 3, name: "Kuza sho'rva", catId: "c1", price: 35000 },
-        { id: 4, name: "Mastava", catId: "c1", price: 26000 },
-        { id: 5, name: "Moshxo'rda", catId: "c1", price: 25000 },
-        { id: 6, name: "Mosh sho'rva", catId: "c1", price: 24000 },
-        { id: 7, name: "Lag'mon", catId: "c1", price: 32000 },
-        { id: 8, name: "Chuchvara", catId: "c1", price: 28000 },
-        { id: 9, name: "Unash", catId: "c1", price: 25000 },
-        { id: 10, name: "Kosa sho'rva", catId: "c1", price: 30000 },
+        { id: 4, name: "Kosa sho'rva", catId: "c1", price: 30000 },
+        { id: 5, name: "Mastava", catId: "c1", price: 26000 },
+        { id: 6, name: "Moshxo'rda", catId: "c1", price: 25000 },
+        { id: 7, name: "Mosh sho'rva", catId: "c1", price: 24000 },
+        { id: 8, name: "Lag'mon", catId: "c1", price: 32000 },
+        { id: 9, name: "Chuchvara", catId: "c1", price: 28000 },
+        { id: 10, name: "Unash", catId: "c1", price: 25000 },
         { id: 11, name: "Osh (Palov)", catId: "c2", price: 35000 },
         { id: 12, name: "To'y oshi", catId: "c2", price: 40000 },
         { id: 13, name: "Samarqand oshi", catId: "c2", price: 40000 },
         { id: 14, name: "Shivit oshi", catId: "c2", price: 35000 },
-        { id: 15, name: "Qozon kabob", catId: "c2", price: 48000 },
-        { id: 16, name: "Dimlama", catId: "c2", price: 38000 },
-        { id: 17, name: "Manti", catId: "c2", price: 28000 },
-        { id: 18, name: "Xonim", catId: "c2", price: 25000 },
-        { id: 19, name: "Norin", catId: "c2", price: 35000 },
-        { id: 20, name: "Qovurma lag'mon", catId: "c2", price: 35000 },
-        { id: 21, name: "Do'lma", catId: "c2", price: 30000 },
-        { id: 22, name: "Tandir go'sht", catId: "c2", price: 60000 },
-        { id: 23, name: "Shashlik", catId: "c2", price: 18000 },
-        { id: 24, name: "Jigar kabob", catId: "c2", price: 18000 },
-        { id: 25, name: "Tandir somsa", catId: "c2", price: 9000 },
-        { id: 26, name: "Achchiq-chuchuk", catId: "c2", price: 12000 },
-        { id: 27, name: "Tandir non", catId: "c2", price: 5000 },
-        { id: 28, name: "Patir non", catId: "c2", price: 8000 },
-        { id: 29, name: "Ko'k choy", catId: "c3", price: 5000 },
-        { id: 30, name: "Qora choy", catId: "c3", price: 5000 },
-        { id: 31, name: "Coca-Cola 1 L", catId: "c3", price: 14000 },
-        { id: 32, name: "Suv 0.5 L", catId: "c3", price: 4000 },
-        { id: 33, name: "Sharbat", catId: "c3", price: 15000 },
-        { id: 34, name: "Kofe", catId: "c3", price: 15000 }
+        { id: 15, name: "Qozon kabob", catId: "c3", price: 48000 },
+        { id: 16, name: "Dimlama", catId: "c3", price: 38000 },
+        { id: 17, name: "Norin", catId: "c3", price: 35000 },
+        { id: 18, name: "Qovurma lag'mon", catId: "c3", price: 35000 },
+        { id: 19, name: "Tandir go'sht", catId: "c3", price: 60000 },
+        { id: 20, name: "Do'lma", catId: "c3", price: 30000 },
+        { id: 21, name: "Manti", catId: "c4", price: 28000 },
+        { id: 22, name: "Xonim", catId: "c4", price: 25000 },
+        { id: 23, name: "Tandir somsa", catId: "c4", price: 9000 },
+        { id: 24, name: "Ko'k somsa", catId: "c4", price: 7000 },
+        { id: 25, name: "Qatlama", catId: "c4", price: 15000 },
+        { id: 26, name: "Shashlik", catId: "c5", price: 18000 },
+        { id: 27, name: "Qo'y go'shti shashlik", catId: "c5", price: 22000 },
+        { id: 28, name: "Lula kabob", catId: "c5", price: 20000 },
+        { id: 29, name: "Jigar kabob", catId: "c5", price: 18000 },
+        { id: 30, name: "Tovuq shashlik", catId: "c5", price: 16000 },
+        { id: 31, name: "Achchiq-chuchuk", catId: "c6", price: 12000 },
+        { id: 32, name: "Toshkent salati", catId: "c6", price: 25000 },
+        { id: 33, name: "Chakka salat", catId: "c6", price: 15000 },
+        { id: 34, name: "Sabzavotli salat", catId: "c6", price: 18000 },
+        { id: 35, name: "Olivye", catId: "c6", price: 22000 },
+        { id: 36, name: "Tandir non", catId: "c7", price: 5000 },
+        { id: 37, name: "Patir non", catId: "c7", price: 8000 },
+        { id: 38, name: "Chak-chak", catId: "c8", price: 15000 },
+        { id: 39, name: "Halva", catId: "c8", price: 12000 },
+        { id: 40, name: "Navvot", catId: "c8", price: 8000 },
+        { id: 41, name: "Ko'k choy", catId: "c9", price: 5000 },
+        { id: 42, name: "Qora choy", catId: "c9", price: 5000 },
+        { id: 43, name: "Ayron", catId: "c9", price: 8000 },
+        { id: 44, name: "Kompot", catId: "c9", price: 10000 },
+        { id: 45, name: "Coca-Cola 1 L", catId: "c9", price: 14000 },
+        { id: 46, name: "Suv 0.5 L", catId: "c9", price: 4000 },
+        { id: 47, name: "Sharbat", catId: "c9", price: 15000 },
+        { id: 48, name: "Kofe", catId: "c9", price: 15000 }
       ].map((m) => ({ ...m, available: true }))
     };
   }
@@ -71,7 +91,8 @@
           fontSize: 12,         // px
           copies: 1,
           autoPrint: false,     // to'lovdan keyin chekni o'zi chiqarsin
-          kitchenPrint: false,  // oshxonaga yuborilganda oshxona cheki
+          kitchenPrint: true,   // oshxonaga yuborilganda oshxona cheki
+          kitchenPrintAt: "kassa", // "kassa" — yuborgan kassada, "oshxona" — oshxona ekranida avtomatik
           showAddress: true,
           showPhone: true,
           showCashier: true,
@@ -81,7 +102,8 @@
       staff: [
         { id: 1, name: "Admin", role: "admin", pin: "1111" },
         { id: 2, name: "Kassir", role: "kassir", pin: "2222" },
-        { id: 3, name: "Oshpaz", role: "oshpaz", pin: "3333" }
+        { id: 3, name: "Oshxona", role: "oshpaz", pin: "3333" },
+        { id: 4, name: "Ofitsiant", role: "ofitsiant", pin: "4444" }
       ],
       ...defaultMenu(),
       halls: [
@@ -140,5 +162,8 @@
     return { paid, change: paid - total, card: c, ok: total > 0 && paid >= total && c <= total };
   }
 
-  return { ROLES, PAY_LABEL, nextId, defaultMenu, defaultConfig, fromLegacy, hallOf, placeName, calc, num, payNums };
+  // Buyurtmaga xizmat qilgan xodim (eski buyurtmalarda — ochgan xodim)
+  const waiterOf = (o) => ({ id: o.waiterId ?? null, name: o.waiterName || o.createdBy || "—" });
+
+  return { waiterOf, ROLES, PAY_LABEL, nextId, defaultMenu, defaultConfig, fromLegacy, hallOf, placeName, calc, num, payNums };
 });

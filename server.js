@@ -55,9 +55,11 @@ const q = {
   getOrder: db.prepare("SELECT data FROM orders WHERE id = ?"),
   openOrderAt: db.prepare("SELECT data FROM orders WHERE status = 'open' AND hall = ? AND tbl = ?"),
   putOrder: db.prepare(`INSERT INTO orders (id, no, hall, tbl, status, created, closed, data) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET status = excluded.status, closed = excluded.closed, data = excluded.data`),
+    ON CONFLICT(id) DO UPDATE SET no = excluded.no, hall = excluded.hall, tbl = excluded.tbl, status = excluded.status,
+      closed = excluded.closed, data = excluded.data`),
   delOrder: db.prepare("DELETE FROM orders WHERE id = ?"),
   maxOrderId: db.prepare("SELECT COALESCE(MAX(id), 0) AS m FROM orders"),
+  maxOrderNo: db.prepare("SELECT COALESCE(MAX(no), 0) AS m FROM orders"),
   recentOrders: db.prepare("SELECT data FROM orders WHERE status = 'open' OR created >= ? OR closed >= ? ORDER BY id"),
   rangeOrders: db.prepare("SELECT data FROM orders WHERE (created >= ? AND created < ?) OR (closed >= ? AND closed < ?) ORDER BY id"),
   allOrders: db.prepare("SELECT data FROM orders ORDER BY id"),
@@ -82,7 +84,7 @@ const setMeta = (k, v) => q.setMeta.run(k, JSON.stringify(v));
 const rowsData = (rows) => rows.map((r) => JSON.parse(r.data));
 
 function saveOrder(o) {
-  const closed = o.paidAt || o.cancelledAt || null;
+  const closed = o.paidAt || o.cancelledAt || o.splitAt || null;
   q.putOrder.run(o.id, o.no, o.hall, o.table, o.status, o.createdAt, closed, JSON.stringify(o));
 }
 function saveTicket(k) { q.putTicket.run(k.id, k.orderId, k.status, k.createdAt, JSON.stringify(k)); }
@@ -146,9 +148,28 @@ function clientState() {
 class UserError extends Error {}
 const fail = (msg) => { throw new UserError(msg); };
 const nowIso = () => new Date().toISOString();
-const ALL = ["admin", "kassir", "oshpaz"];
 const CASH = ["admin", "kassir"];
+const TAKE = ["admin", "kassir", "ofitsiant"]; // buyurtma olish (to'lovsiz)
 const ADMIN = ["admin"];
+
+// Buyurtma raqami hech qachon takrorlanmaydi
+function newOrderNo() {
+  const no = Math.max(meta("nextOrderNo", 1), q.maxOrderNo.get().m + 1);
+  setMeta("nextOrderNo", no + 1);
+  return no;
+}
+
+// To'lov ma'lumotlarini buyurtmaga yozish (to'liq va bo'lib to'lashda bir xil)
+function markPaid(cfg, o, p, user) {
+  const c = Shared.calc(cfg, o);
+  const n = Shared.payNums(p.method, c.total, p.given, p.card, p.cash);
+  if (!n.ok) fail(p.method === "aralash" && n.card > c.total ? "Karta summasi jami summadan oshmasligi kerak" : "To'lov summasi yetarli emas");
+  Object.assign(o, {
+    status: "paid", paidAt: nowIso(), sub: c.sub, discountSum: c.disc, serviceSum: c.svc, servicePct: c.svcPct, total: c.total,
+    cashierId: user.id, cashierName: user.name,
+    payment: { method: p.method, card: n.card, cash: c.total - n.card, given: n.paid, change: n.change }
+  });
+}
 
 function loadOrder(id) {
   const r = q.getOrder.get(Number(id));
@@ -174,7 +195,7 @@ const str = (v, max = 200) => String(v ?? "").trim().slice(0, max);
 
 const ACTIONS = {
   // ---- Kassa ----
-  "order.add": { roles: CASH, run(p, user) {
+  "order.add": { roles: TAKE, run(p, user) {
     const cfg = config();
     const hall = Shared.hallOf(cfg, p.hall);
     const table = Number(p.table);
@@ -185,9 +206,9 @@ const ACTIONS = {
     const row = q.openOrderAt.get(p.hall, table);
     let o = row ? JSON.parse(row.data) : null;
     if (!o) {
-      const no = meta("nextOrderNo", 1);
-      setMeta("nextOrderNo", no + 1);
-      o = { id: q.maxOrderId.get().m + 1, no, hall: p.hall, table, items: [], note: "", discount: 0, status: "open", createdAt: nowIso(), createdBy: user.name };
+      const no = newOrderNo();
+      o = { id: q.maxOrderId.get().m + 1, no, hall: p.hall, table, items: [], note: "", discount: 0, status: "open", createdAt: nowIso(), createdBy: user.name,
+        waiterId: user.id, waiterName: user.name }; // stolga xizmat qiluvchi — xizmat haqi shu xodimga yoziladi
     }
     const it = o.items.find((i) => i.pid === m.id && i.price === m.price);
     if (it) it.qty++;
@@ -195,7 +216,7 @@ const ACTIONS = {
     saveOrder(o);
     return { orderId: o.id };
   } },
-  "order.qty": { roles: CASH, run(p) {
+  "order.qty": { roles: TAKE, run(p) {
     const o = openOrder(p.orderId);
     const i = itemAt(o, p.idx, p.pid);
     const it = o.items[i];
@@ -205,26 +226,50 @@ const ACTIONS = {
     if (it.qty <= 0) o.items.splice(i, 1);
     if (!dropIfEmpty(o)) saveOrder(o);
   } },
-  "order.remove": { roles: CASH, run(p) {
+  "order.remove": { roles: TAKE, run(p) {
     const o = openOrder(p.orderId);
     o.items.splice(itemAt(o, p.idx, p.pid), 1);
     if (!dropIfEmpty(o)) saveOrder(o);
   } },
-  "order.note": { roles: CASH, run(p) {
+  "order.note": { roles: TAKE, run(p) {
     const o = openOrder(p.orderId);
     o.note = str(p.note, 300);
     saveOrder(o);
+  } },
+  // Kassir buyurtmani boshqa ofitsiantga biriktirishi mumkin (xizmat haqi o'shanga yoziladi)
+  "order.waiter": { roles: CASH, run(p) {
+    const o = openOrder(p.orderId);
+    const u = config().staff.find((x) => x.id === Number(p.staffId));
+    if (!u || u.role === "oshpaz") fail("Xodim topilmadi");
+    Object.assign(o, { waiterId: u.id, waiterName: u.name });
+    saveOrder(o);
+    // hali topshirilmagan chiptalar ham yangi ofitsiantga o'tadi
+    rowsData(q.ticketsOfOrder.all(o.id)).forEach((k) => { if (k.status !== "served") { Object.assign(k, { waiterId: u.id, waiterName: u.name }); saveTicket(k); } });
+  } },
+  // Stolni almashtirish: ochiq buyurtma boshqa (bo'sh) stolga ko'chadi
+  "order.move": { roles: CASH, run(p) {
+    const cfg = config();
+    const o = openOrder(p.orderId);
+    const hall = cfg.halls.find((h) => h.id === p.hall);
+    const table = Number(p.table);
+    if (!hall || !(table >= 1 && table <= hall.count)) fail("Bunday stol yo'q");
+    if (q.openOrderAt.get(p.hall, table)) fail(`${hall.name}, ${table}-stol band`);
+    Object.assign(o, { hall: p.hall, table });
+    saveOrder(o);
+    rowsData(q.ticketsOfOrder.all(o.id)).forEach((k) => { Object.assign(k, { hall: p.hall, table }); saveTicket(k); });
   } },
   "order.discount": { roles: CASH, run(p) {
     const o = openOrder(p.orderId);
     o.discount = Math.min(100, Math.max(0, Math.round(Number(p.discount) || 0)));
     saveOrder(o);
   } },
-  "order.kitchen": { roles: CASH, run(p) {
+  "order.kitchen": { roles: TAKE, run(p) {
     const o = openOrder(p.orderId);
     const items = o.items.filter((i) => i.qty > i.sent).map((i) => ({ name: i.name, qty: i.qty - i.sent }));
     if (!items.length) fail("Yuboriladigan yangi taom yo'q");
-    const ticket = { id: q.maxTicketId.get().m + 1, orderId: o.id, orderNo: o.no, hall: o.hall, table: o.table, items, note: o.note, status: "new", createdAt: nowIso() };
+    const w = Shared.waiterOf(o);
+    const ticket = { id: q.maxTicketId.get().m + 1, orderId: o.id, orderNo: o.no, hall: o.hall, table: o.table, items, note: o.note, status: "new", createdAt: nowIso(),
+      waiterId: w.id, waiterName: w.name };
     saveTicket(ticket);
     o.items.forEach((i) => (i.sent = i.qty));
     saveOrder(o);
@@ -235,16 +280,39 @@ const ACTIONS = {
     const o = openOrder(p.orderId);
     if (!o.items.length) fail("Buyurtma bo'sh");
     if (!Shared.PAY_LABEL[p.method]) fail("To'lov turini tanlang");
-    const c = Shared.calc(cfg, o);
-    const n = Shared.payNums(p.method, c.total, p.given, p.card, p.cash);
-    if (!n.ok) fail(p.method === "aralash" && n.card > c.total ? "Karta summasi jami summadan oshmasligi kerak" : "To'lov summasi yetarli emas");
-    Object.assign(o, {
-      status: "paid", paidAt: nowIso(), sub: c.sub, discountSum: c.disc, serviceSum: c.svc, servicePct: c.svcPct, total: c.total,
-      cashierId: user.id, cashierName: user.name,
-      payment: { method: p.method, card: n.card, cash: c.total - n.card, given: n.paid, change: n.change }
-    });
+    markPaid(cfg, o, p, user);
     saveOrder(o);
     return { orderId: o.id };
+  } },
+  // Hisobni bo'lib to'lash: tanlangan taomlar alohida chek bo'lib to'lanadi, qolgani stolda ochiq qoladi
+  "order.payPart": { roles: CASH, run(p, user) {
+    const cfg = config();
+    const o = openOrder(p.orderId);
+    if (!Shared.PAY_LABEL[p.method]) fail("To'lov turini tanlang");
+    const parts = Array.isArray(p.parts) ? p.parts : [];
+    const items = [];
+    parts.forEach((x) => {
+      const qty = Math.floor(Number(x.qty) || 0);
+      if (qty <= 0) return;
+      const it = o.items.find((i) => i.pid === Number(x.pid) && i.price === Number(x.price));
+      if (!it || qty > it.qty) fail("Tanlangan taom soni buyurtmadagidan ko'p (boshqa qurilmada o'zgargan bo'lishi mumkin)");
+      items.push({ ...it, qty, sent: Math.min(it.sent, qty) });
+      it.sent = Math.max(0, it.sent - Math.min(it.sent, qty));
+      it.qty -= qty;
+    });
+    if (!items.length) fail("To'lash uchun taom tanlang");
+    const part = {
+      id: q.maxOrderId.get().m + 1, no: newOrderNo(), hall: o.hall, table: o.table, items, note: o.note, discount: o.discount,
+      status: "open", createdAt: o.createdAt, createdBy: o.createdBy, waiterId: o.waiterId, waiterName: o.waiterName, splitFrom: o.no
+    };
+    markPaid(cfg, part, p, user);
+    saveOrder(part);
+    o.items = o.items.filter((i) => i.qty > 0);
+    if (!o.items.length) {
+      // hammasi bo'lib to'landi: asosiy buyurtma yopiladi (oshxona chiptalari bog'langan bo'lishi mumkin)
+      if (!dropIfEmpty(o)) { Object.assign(o, { status: "split", splitAt: nowIso() }); saveOrder(o); }
+    } else saveOrder(o);
+    return { orderId: part.id, remaining: o.items.length };
   } },
   "order.cancel": { roles: ADMIN, run(p, user) {
     const o = openOrder(p.orderId);
@@ -254,13 +322,17 @@ const ACTIONS = {
   } },
 
   // ---- Oshxona ----
-  "ticket.set": { roles: ["admin", "oshpaz"], run(p) {
+  "ticket.set": { roles: ["admin", "oshpaz", "kassir", "ofitsiant"], run(p, user) {
     if (!["new", "cooking", "ready", "served"].includes(p.status)) fail("Noto'g'ri holat");
+    // Ofitsiant va kassir faqat tayyor taomni "oldim" (topshirildi) deb belgilay oladi
+    if (["kassir", "ofitsiant"].includes(user.role) && p.status !== "served") fail("Bu amal uchun ruxsatingiz yo'q");
     const r = q.getTicket.get(Number(p.id));
     if (!r) fail("Chipta topilmadi");
     const k = JSON.parse(r.data);
+    if (["kassir", "ofitsiant"].includes(user.role) && k.status !== "ready") fail("Bu buyurtma hali tayyor emas");
     k.status = p.status;
     k[p.status + "At"] = nowIso();
+    if (p.status === "served") k.servedBy = user.name;
     saveTicket(k);
   } },
 
@@ -271,6 +343,13 @@ const ACTIONS = {
     if (!name) fail("Nomini kiriting");
     if (p.id) { const c = cfg.categories.find((x) => x.id === p.id); if (!c) fail("Kategoriya topilmadi"); c.name = name; }
     else cfg.categories.push({ id: "c" + (cfg.categories.reduce((m, c) => Math.max(m, Number(String(c.id).slice(1)) || 0), 0) + 1), name });
+    setMeta("config", cfg);
+  } },
+  "cat.reorder": { roles: ADMIN, run(p) {
+    const cfg = config();
+    const ids = Array.isArray(p.ids) ? p.ids : [];
+    const rank = (c) => { const i = ids.indexOf(c.id); return i < 0 ? 1e9 : i; };
+    cfg.categories.sort((a, b) => rank(a) - rank(b));
     setMeta("config", cfg);
   } },
   "cat.delete": { roles: ADMIN, run(p) {
@@ -344,7 +423,8 @@ const ACTIONS = {
       copies: Math.min(3, Math.max(1, Number(x.copies) || 1)),
       header: str(x.header, 80),
       showAddress: !!x.showAddress, showPhone: !!x.showPhone, showCashier: !!x.showCashier,
-      autoPrint: !!x.autoPrint, kitchenPrint: !!x.kitchenPrint
+      autoPrint: !!x.autoPrint, kitchenPrint: !!x.kitchenPrint,
+      kitchenPrintAt: x.kitchenPrintAt === "oshxona" ? "oshxona" : "kassa"
     };
     cfg.settings.receiptFooter = str(p.receiptFooter, 120);
     setMeta("config", cfg);
@@ -451,7 +531,14 @@ function backup(force = false) {
   } catch (e) { console.error("Zaxira xatosi:", e.message); }
 }
 backup();
-setInterval(backup, 60 * 60 * 1000);
+setInterval(() => { backup(); try { db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); } catch (e) {} }, 60 * 60 * 1000);
+
+// To'xtatilganda (Ctrl+C yoki oyna yopilganda) bazani to'g'ri yopamiz
+function shutdown() {
+  try { db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); db.close(); } catch (e) {}
+  process.exit(0);
+}
+["SIGINT", "SIGTERM", "SIGHUP"].forEach((sig) => process.on(sig, shutdown));
 
 // ---------------------------------------------------------------------
 // 6. HTTP server

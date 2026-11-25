@@ -42,7 +42,8 @@ ko'rsatilgan manzilni ochadi, masalan `http://192.168.1.20:3000`.
 |---|---|---|
 | Admin | Admin panel, Oshxona, Stollar, Menyu, Buyurtmalar, Sozlamalar | 1111 |
 | Kassir | Kassa, Buyurtmalar | 2222 |
-| Oshpaz | Faqat Oshxona | 3333 |
+| Ofitsiant | Ofitsiant paneli: stol → taom → oshxonaga yuborish (to'lov va chegirmasiz) | 4444 |
+| Oshxona | Faqat Oshxona paneli | 3333 |
 
 PIN kodlarni **Sozlamalar → Xodimlar** bo'limida o'zgartiring (mijozga topshirishdan oldin albatta).
 
@@ -51,8 +52,9 @@ PIN kodlarni **Sozlamalar → Xodimlar** bo'limida o'zgartiring (mijozga topshir
 | Bo'lim | Nima qiladi |
 |---|---|
 | Admin panel | Tanlangan kun/oraliqda tushum, qaysi taom qancha sotilgani, kategoriyalar, sotilmagan taomlar, taom qo'shish |
+| Ofitsiant | Kassa bilan bir xil, lekin faqat buyurtma olish va oshxonaga yuborish. Telefon yoki planshetda qulay |
 | Kassa | Joy (Zal, Ko'cha, VIP...) → stol → menyudan taom → oshxonaga yuborish → to'lov → chek |
-| Oshxona | Oshpaz ekrani: Yangi → Tayyorlanmoqda → Tayyor → Berildi |
+| Oshxona | Oshxona ekrani: Yangi → Tayyorlanmoqda → Tayyor → Berildi |
 | Stollar | Joylar va ulardagi stollar soni, xizmat haqi (%) |
 | Menyu | Kategoriyalar va taomlar: nom, narx, sotuvda bor/yo'q |
 | Buyurtmalar | Sana bo'yicha buyurtmalar, tushum (naqd/karta), chekni qayta chiqarish, bekor qilish |
@@ -61,11 +63,27 @@ PIN kodlarni **Sozlamalar → Xodimlar** bo'limida o'zgartiring (mijozga topshir
 ## Ish jarayoni
 
 1. **Kassa** — joyni, keyin stolni tanlang → taomlarni bosing → soni, izoh, chegirma.
-2. **Oshxonaga yuborish** — buyurtma Oshxona paneliga tushadi. Oshpaz "Tayyor" bosganda kassada stol binafsha rangda "Tayyor!" deb yonadi.
-3. **To'lov** — Naqd (qaytim avtomatik), Karta yoki Aralash → "To'lovni tasdiqlash".
-4. **Chek** — "Chek chiqarish". Stol avtomatik bo'shaydi.
+2. **Oshxonaga yuborish** — buyurtma Oshxona paneliga tushadi.
+3. **Tayyor → ofitsiantga topshirish** — oshxona "Tayyor" bosadi. O'sha stol ofitsiantining ekranida (telefonida) ovozli xabar va **"Oshxonada tayyor"** oynasi chiqadi, stol binafsha rangda "Tayyor!" deb yonadi. Ofitsiant taomni olgach **"Oldim"** bosadi — oshxonada ham, kassada ham yopiladi.
+4. **To'lov** — Naqd (qaytim avtomatik), Karta yoki Aralash → "To'lovni tasdiqlash".
+5. **Chek** — "Chek chiqarish". Stol avtomatik bo'shaydi.
 
-Oshxona panelini alohida ekranda (planshet yoki monitor) Oshpaz PIN kodi bilan oching. Oshxonada printer bo'lsa: **Sozlamalar → Chek va printer**da "Oshxonaga yuborilganda chek ham chiqsin" ni yoqing.
+Oshxona panelini alohida ekranda (planshet yoki monitor) Oshxona PIN kodi (3333) bilan oching. Oshxonada printer bo'lsa: **Sozlamalar → Chek va printer**da "Oshxonaga yuborilganda chek ham chiqsin" ni yoqing.
+
+## Ofitsiant puli (xizmat haqi)
+
+- Har bir joyning xizmat haqi foizi **Stollar** bo'limida qo'yiladi (hozir hammasida 10%). U mijoz chekiga qo'shiladi.
+- Buyurtmani ochgan ofitsiant shu stolga xizmat qiluvchi hisoblanadi; kassir kassada "Ofitsiant" ro'yxatidan boshqasini tanlashi mumkin.
+- To'langan buyurtmaning xizmat haqi o'sha ofitsiantga yoziladi:
+  - ofitsiant o'z panelida **"Bugungi pulim"** ni ko'radi;
+  - Admin panelda **"Ofitsiantlar — xizmat haqi"** jadvali: tanlangan sana bo'yicha har bir ofitsiantga beriladigan pul.
+- Chekda ofitsiant ismi chiqadi.
+
+## Hisob cheki va bo'lib to'lash
+
+- **Hisob cheki** (kassa, buyurtma oynasi pastida): to'lovdan oldin mijozga "HISOB" cheki chiqadi.
+- **Bo'lib to'lash** (to'lov qatorida): bir stoldagi mijozlar alohida to'laydi. Kassir taomlarni tanlaydi → shu qism uchun alohida to'lov va alohida chek (`#10 (#8 dan)`). Qolgani stolda ochiq qoladi.
+- Oynada **teng bo'lish** hisobi ham bor: stol jami ÷ kishilar soni.
 
 ## Chek printer
 
@@ -76,6 +94,15 @@ Oshxona panelini alohida ekranda (planshet yoki monitor) Oshpaz PIN kodi bilan o
 - to'lovdan keyin chekni avtomatik chiqarish;
 - oshxonaga yuborilganda narxsiz oshxona chekini chiqarish;
 - "Sinov cheki" tugmasi va chekning jonli ko'rinishi.
+
+### Oshxona cheki
+
+**Sozlamalar → Chek va printer → "Oshxona cheki chiqsin"** (yoqilgan). Ikki usul:
+
+- **Kassadagi printer** — kassir "Oshxonaga yuborish" bosganda chek kassa printeridan chiqadi.
+- **Oshxona ekranidagi printer** — oshxonada printer ulangan kompyuter/planshetda Oshxona paneli ochiq turadi, yangi buyurtma kelishi bilan chek o'zi chiqadi. Ofitsiantlar telefondan yuborsa — shu usulni tanlang.
+
+Oshxona panelidagi har bir chiptada 🖨 tugmasi — chekni qayta chiqarish.
 
 ### Chekni oynasiz, to'g'ridan-to'g'ri chiqarish
 

@@ -11,6 +11,7 @@ const { ROLES, PAY_LABEL } = Shared;
 const NAV = [
   { id: "admin", label: "Admin panel", icon: "chart", roles: ["admin"] },
   { id: "kassa", label: "Kassa", icon: "cash", roles: ["kassir"] },
+  { id: "waiter", label: "Ofitsiant", icon: "users", roles: ["ofitsiant"] },
   { id: "kitchen", label: "Oshxona", icon: "chef", roles: ["admin", "oshpaz"] },
   { id: "halls", label: "Stollar", icon: "seat", roles: ["admin"] },
   { id: "menu", label: "Menyu", icon: "book", roles: ["admin"] },
@@ -241,6 +242,7 @@ async function doLogin() {
 }
 
 async function logout() {
+  readyKnown = null;
   try { await api("/api/logout", { body: {} }); } catch (e) {}
   me = null;
   loginPick = null;
@@ -265,7 +267,7 @@ function go(v) {
 // ---------------------------------------------------------------------
 
 function renderAll() {
-  if (!me) { shownView = null; renderLogin(); return; }
+  if (!me) { shownView = null; $("readyDock").classList.add("hidden"); renderLogin(); return; }
   $("login").classList.add("hidden");
   $("app").classList.remove("hidden");
   if (!can(view)) view = firstAllowed();
@@ -273,6 +275,8 @@ function renderAll() {
   renderSidebar();
   renderHeader();
   VIEWS[view]();
+  kitchenAutoPrint();
+  renderReadyDock();
 }
 
 function renderSidebar() {
@@ -355,6 +359,7 @@ function orderStatus(o) {
   if (o.status === "paid") return ["To'langan", "green"];
   if (o.status === "cancelled") return ["Bekor qilingan", "red"];
   if (o.status === "refunded") return ["Qaytarilgan", "red"];
+  if (o.status === "split") return ["Bo'lib to'langan", "green"];
   return { none: ["Ochiq", "blue"], cooking: ["Oshxonada", "orange"], ready: ["Tayyor", "purple"], served: ["Berildi", "blue"] }[kitchenState(o)];
 }
 
@@ -369,14 +374,18 @@ let lastAdded = null;
 let pay = newPay();
 function newPay() { return { method: "naqd", given: "", card: "", cash: "" }; }
 
+// Ofitsiant paneli = kassa, lekin to'lov va chegirmasiz (faqat buyurtma olish va oshxonaga yuborish)
+const isWaiter = () => view === "waiter";
+
 function renderKassa() {
   if (!S.halls.some((h) => h.id === selHall)) selHall = (S.halls.find((h) => h.count > 0) || S.halls[0] || {}).id || null;
   if (selTable && selTable > hallOf(selHall).count) selTable = null;
-  const mode = selTable ? "order" : "tables";
+  const mode = (selTable ? "order" : "tables") + (isWaiter() ? "-w" : "");
   const root = $("kassaRoot");
   if (!root || root.dataset.mode !== mode) {
-    $("content").innerHTML = mode === "tables" ? `
-      <div id="kassaRoot" data-mode="tables">
+    $("content").innerHTML = !selTable ? `
+      <div id="kassaRoot" data-mode="${mode}">
+        ${isWaiter() ? `<div id="kMine" class="card mine mb"></div>` : ""}
         <div id="kHalls" class="hall-tabs"></div>
         <div class="page-head">
           <div><h2 id="kHallTitle">Stollar</h2><p class="muted">Buyurtma olish uchun stolni tanlang</p></div>
@@ -384,7 +393,7 @@ function renderKassa() {
         </div>
         <div id="kTables" class="tables-page"></div>
       </div>` : `
-      <div class="kassa order-mode" id="kassaRoot" data-mode="order">
+      <div class="kassa order-mode ${isWaiter() ? "waiter" : ""}" id="kassaRoot" data-mode="${mode}">
         <div class="order-top">
           <button class="btn back-btn" onclick="backToTables()">← Stollar</button>
           <h2 id="kTitle"></h2>
@@ -396,18 +405,34 @@ function renderKassa() {
           <div id="kMenu" class="prod-grid"></div>
         </section>
         <section class="panel order-panel" id="kOrder"></section>
-        <section class="panel pay-bar" id="kPay"></section>
+        ${isWaiter() ? "" : `<section class="panel pay-bar" id="kPay"></section>`}
       </div>`;
     if ($("kSearch")) $("kSearch").value = menuSearch;
   }
-  if (mode === "tables") { renderKassaTables(); return; }
+  if (!selTable) { renderKassaTables(); return; }
   $("kTitle").textContent = placeName(selHall, selTable);
   renderKassaMenu();
   renderOrderPanel();
-  renderPayBar();
+  if (!isWaiter()) renderPayBar();
+}
+
+// Ofitsiantning bugungi ishi va puli (xizmat haqi)
+function renderMine() {
+  if (!$("kMine")) return;
+  const today = { from: todayYmd(), to: todayYmd() };
+  const mine = S.orders.filter((o) => Shared.waiterOf(o).id === me.id || (Shared.waiterOf(o).id == null && o.createdBy === me.name));
+  const paid = mine.filter((o) => o.status === "paid" && inRange(o.paidAt, today));
+  const open = mine.filter((o) => o.status === "open");
+  const earned = paid.reduce((s, o) => s + (o.serviceSum || 0), 0);
+  const waiting = open.reduce((s, o) => s + calc(o).svc, 0);
+  $("kMine").innerHTML = `
+    <div class="mine-item main"><span>${icon("wallet")} Bugungi pulim (xizmat haqi)</span><b>${money(earned)}</b></div>
+    <div class="mine-item"><span>Yopilgan stollar</span><b>${paid.length} ta</b><small>${money(paid.reduce((s, o) => s + o.total, 0))} savdo</small></div>
+    <div class="mine-item"><span>Hozir ochiq stollarim</span><b>${open.length} ta</b><small>yopilsa +${money(waiting)}</small></div>`;
 }
 
 function renderKassaTables() {
+  renderMine();
   const openIn = (h) => S.orders.filter((o) => o.status === "open" && o.hall === h).length;
   $("kHalls").innerHTML = S.halls.map((h) => `
     <button class="hall-tab ${h.id === selHall ? "active" : ""}" onclick="selHall='${h.id}';renderKassa()">
@@ -527,8 +552,12 @@ function renderOrderPanel() {
   el.innerHTML = `
     <div class="order-head">
       <div><h3>Buyurtma</h3><span class="muted">${o ? `#${o.no} · ${tm(o.createdAt)} da ochilgan` : "Yangi buyurtma"}</span></div>
-      <span class="badge ${st[1]}">${st[0]}</span>
+      <div class="row">
+        ${o && !isWaiter() ? `<button class="btn sm" onclick="openMove()" title="Buyurtmani boshqa stolga ko'chirish">${icon("seat")} Stolni almashtirish</button>` : ""}
+        <span class="badge ${st[1]}">${st[0]}</span>
+      </div>
     </div>
+    ${o ? waiterRowHtml(o) : ""}
     <div class="order-items">
       ${items.length ? items.map((i, idx) => `
         <div class="oi">
@@ -541,18 +570,34 @@ function renderOrderPanel() {
     </div>
     <div class="order-foot">
       <textarea rows="2" placeholder="Buyurtma izohi (masalan: achchiq bo'lmasin)" onchange="setNote(this.value)" ${dis}>${esc(o ? o.note : "")}</textarea>
-      <div class="disc-row"><span>Chegirma</span>
+      ${isWaiter() ? "" : `<div class="disc-row"><span>Chegirma</span>
         <div class="disc-btns">
           ${[0, 5, 10, 15].map((p) => `<button class="chip-btn ${o && o.discount === p ? "active" : ""}" onclick="setDiscount(${p})" ${dis}>${p}%</button>`).join("")}
           <input type="number" min="0" max="100" value="${o ? o.discount : 0}" onchange="setDiscount(this.value)" ${dis}>%
         </div>
-      </div>
+      </div>`}
       <div class="sum-row"><span>Oraliq summa</span><span>${money(c.sub)}</span></div>
       <div class="sum-row"><span>Chegirma</span><span class="red-t">− ${money(c.disc)}</span></div>
       ${c.svcPct ? `<div class="sum-row"><span>Xizmat haqi (${c.svcPct}%)</span><span>+ ${money(c.svc)}</span></div>` : ""}
       <div class="sum-row total"><span>Jami</span><span>${money(c.total)}</span></div>
-      <button class="btn primary big" onclick="sendToKitchen()" ${unsent ? "" : "disabled"}>${icon("chef")} Oshxonaga yuborish</button>
+      <div class="foot-btns">
+        <button class="btn primary big" onclick="sendToKitchen()" ${unsent ? "" : "disabled"}>${icon("chef")} Oshxonaga yuborish</button>
+        <button class="btn big bill-btn" onclick="printBill()" ${o && o.items.length ? "" : "disabled"} title="To'lovdan oldin mijozga hisob">${icon("print")} Hisob cheki</button>
+      </div>
+      ${isWaiter() && o && !unsent ? `<p class="muted waiter-hint">To'lovni kassir qabul qiladi.</p>` : ""}
     </div>`;
+}
+
+// Buyurtmaga xizmat qilayotgan ofitsiant (xizmat haqi shu xodimga yoziladi)
+function waiterRowHtml(o) {
+  const w = Shared.waiterOf(o);
+  if (isWaiter()) return `<div class="waiter-row">${icon("users")}<span>Ofitsiant: <b>${esc(w.name)}</b></span></div>`;
+  const list = S.staff.filter((u) => u.role !== "oshpaz").sort((a, b) => (a.role === "ofitsiant" ? 0 : 1) - (b.role === "ofitsiant" ? 0 : 1));
+  return `<div class="waiter-row">${icon("users")}<span>Ofitsiant:</span>
+    <select onchange="act('order.waiter',{orderId:${o.id},staffId:Number(this.value)})">
+      ${w.id == null ? `<option value="" selected>${esc(w.name)}</option>` : ""}
+      ${list.map((u) => `<option value="${u.id}" ${u.id === w.id ? "selected" : ""}>${esc(u.name)}${u.role === "ofitsiant" ? "" : ` (${ROLES[u.role]})`}</option>`).join("")}
+    </select></div>`;
 }
 
 // Oshxonaga yuborish: Oshxona paneliga chipta tushadi (printer yoqilgan bo'lsa chek ham chiqadi)
@@ -561,7 +606,8 @@ async function sendToKitchen() {
   if (!o) return;
   const r = await act("order.kitchen", { orderId: o.id });
   if (!r) return;
-  if (S.settings.printer.kitchenPrint) printHtml(kitchenTicketHtml(r.ticket), { ...S.settings.printer, copies: 1 });
+  const pc = S.settings.printer;
+  if (pc.kitchenPrint && pc.kitchenPrintAt !== "oshxona" && me.role !== "ofitsiant") printKitchenTicket(r.ticket);
   toast(`${placeName(o.hall, o.table)} oshxonaga yuborildi`, "success");
 }
 
@@ -590,6 +636,7 @@ function renderPayBar() {
     <div class="pay-methods">
       ${[["naqd", "Naqd pul", "cash"], ["karta", "Karta", "card"], ["aralash", "Aralash", "split"]].map(([k, l, ic]) =>
         `<button class="pm ${pay.method === k ? "active" : ""}" onclick="pay.method='${k}';renderPayBar()">${icon(ic)}<span>${l}</span></button>`).join("")}
+      <button class="pm split-pm" onclick="openSplit()" title="Har kim o'z taomini alohida to'laydi">${icon("users")}<span>Bo'lib to'lash</span></button>
     </div>
     <div class="pay-inputs">${inputs[pay.method]}</div>
     <div class="pay-sums">
@@ -640,6 +687,126 @@ async function confirmPayment() {
   if (S.settings.printer.autoPrint) setTimeout(() => printReceipt(r.orderId), 300);
 }
 
+// Stolni almashtirish: bo'sh stolni tanlash oynasi
+let moveHall = null;
+function openMove() {
+  const o = curOrder();
+  if (!o) return;
+  moveHall = moveHall && S.halls.some((h) => h.id === moveHall) ? moveHall : o.hall;
+  const h = hallOf(moveHall);
+  const tables = Array.from({ length: h.count }, (_, i) => i + 1);
+  openModal(`
+    <div class="modal-title"><h2>Stolni almashtirish</h2></div>
+    <p class="muted">#${o.no} buyurtma (${esc(placeName(o.hall, o.table))}) qaysi stolga ko'chirilsin?</p>
+    <div class="seg move-halls">${S.halls.map((x) => `<button class="${x.id === moveHall ? "active" : ""}" onclick="moveHall='${x.id}';openMove()">${esc(x.name)}</button>`).join("")}</div>
+    <div class="move-grid">${tables.map((t) => {
+      const busy = !!activeOrder(moveHall, t);
+      return `<button class="move-t ${busy ? "busy" : ""}" ${busy ? "disabled" : ""} onclick="doMove('${moveHall}',${t})">${t}<small>${busy ? "band" : "bo'sh"}</small></button>`;
+    }).join("") || `<div class="muted">Bu joyda stol yo'q</div>`}</div>
+    <div class="modal-actions"><button class="btn" onclick="closeModal()">Bekor qilish</button></div>`);
+}
+
+async function doMove(hall, table) {
+  const o = curOrder();
+  if (!o) return;
+  if (await act("order.move", { orderId: o.id, hall, table })) {
+    closeModal();
+    selHall = hall;
+    selTable = table;
+    renderAll();
+    toast(`Buyurtma ${placeName(hall, table)} ga ko'chirildi`, "success");
+  }
+}
+
+// Mijozga to'lovdan oldin hisob cheki ("TO'LANMAGAN")
+function printBill() {
+  const o = curOrder();
+  if (o && o.items.length) printHtml(receiptHtml(o));
+}
+
+// --- Hisobni bo'lib to'lash: har kim o'z taomini alohida to'laydi ---
+let split = null;
+
+function openSplit() {
+  const o = curOrder();
+  if (!o || !o.items.length) return;
+  split = { orderId: o.id, sel: o.items.map(() => 0), method: "naqd", given: "", people: 2 };
+  openModal(`<div id="splitBox"></div>`, "lg");
+  renderSplit();
+}
+
+function splitOrder() {
+  const o = curOrder();
+  return o && split && o.id === split.orderId ? o : null;
+}
+
+function renderSplit() {
+  const o = splitOrder();
+  if (!o) { closeModal(); return; }
+  if (split.sel.length !== o.items.length) split.sel = o.items.map((_, i) => Math.min(split.sel[i] || 0, o.items[i].qty));
+  const part = { hall: o.hall, discount: o.discount, items: o.items.map((i, k) => ({ ...i, qty: split.sel[k] })).filter((i) => i.qty > 0) };
+  const c = calc(part);
+  const all = calc(o).total;
+  const n = Shared.payNums(split.method, c.total, split.given);
+  $("splitBox").innerHTML = `
+    <div class="modal-title"><h2>Bo'lib to'lash — ${esc(placeName(o.hall, o.table))}</h2></div>
+    <p class="muted">Mijoz to'laydigan taomlarni tanlang. Qolgani stolda ochiq qoladi va keyin to'lanadi.</p>
+    <div class="split-list">
+      ${o.items.map((i, k) => `
+        <div class="split-row ${split.sel[k] ? "on" : ""}">
+          <div class="grow"><b>${esc(i.name)}</b><small>${money(i.price)} · stolda ${i.qty} ta</small></div>
+          <div class="qty"><button onclick="splitQty(${k},-1)">−</button><b>${split.sel[k]}</b><button onclick="splitQty(${k},1)">+</button></div>
+          <button class="chip-btn" onclick="split.sel[${k}]=${i.qty};renderSplit()">Hammasi</button>
+          <div class="oi-sum">${fmt(i.price * split.sel[k])}</div>
+        </div>`).join("")}
+    </div>
+    <div class="split-foot">
+      <div>
+        ${c.disc ? `<div class="sum-row"><span>Chegirma (${o.discount}%)</span><span class="red-t">− ${money(c.disc)}</span></div>` : ""}
+        ${c.svcPct ? `<div class="sum-row"><span>Xizmat haqi (${c.svcPct}%)</span><span>+ ${money(c.svc)}</span></div>` : ""}
+        <div class="sum-row total"><span>Bu mijoz to'laydi</span><span>${money(c.total)}</span></div>
+        <div class="split-even">
+          <span>Teng bo'lish: stol jami ${money(all)} ÷</span>
+          <input type="number" min="2" max="30" value="${split.people}" oninput="split.people=Math.max(2,Number(this.value)||2);$('splitEach').textContent=money(Math.ceil(${all}/split.people/100)*100)">
+          <span>kishi = har biri <b id="splitEach">${money(Math.ceil(all / split.people / 100) * 100)}</b></span>
+        </div>
+      </div>
+      <div>
+        <div class="seg">${[["naqd", "Naqd"], ["karta", "Karta"]].map(([k, l]) => `<button class="${split.method === k ? "active" : ""}" onclick="split.method='${k}';renderSplit()">${l}</button>`).join("")}</div>
+        ${split.method === "naqd" ? `<label class="muted split-given">Mijoz bergan pul<input id="splitGiven" inputmode="numeric" placeholder="0" value="${esc(split.given)}" oninput="split.given=this.value;$('splitChange').textContent=money(Math.max(0,Shared.num(this.value)-${c.total}))"></label>
+          <div class="muted">Qaytim: <b id="splitChange">${money(Math.max(0, n.change))}</b></div>` : `<div class="muted split-given">Terminal orqali <b>${money(c.total)}</b></div>`}
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">Bekor qilish</button>
+      <button class="btn green" onclick="confirmSplit()" ${c.total > 0 ? "" : "disabled"}>${icon("check")} ${money(c.total)} to'lovni qabul qilish</button>
+    </div>`;
+}
+
+function splitQty(k, d) {
+  const o = splitOrder();
+  if (!o) return;
+  split.sel[k] = Math.min(o.items[k].qty, Math.max(0, split.sel[k] + d));
+  renderSplit();
+}
+
+async function confirmSplit() {
+  const o = splitOrder();
+  if (!o || paying) return;
+  const parts = o.items.map((i, k) => ({ pid: i.pid, price: i.price, qty: split.sel[k] })).filter((x) => x.qty > 0);
+  if (!parts.length) return toast("To'lash uchun taom tanlang", "warn");
+  if (split.method === "naqd" && !split.given) split.given = String(calc({ hall: o.hall, discount: o.discount, items: o.items.map((i, k) => ({ ...i, qty: split.sel[k] })) }).total);
+  paying = true;
+  const r = await act("order.payPart", { orderId: o.id, parts, method: split.method, given: split.given });
+  paying = false;
+  if (!r) return;
+  closeModal();
+  if (!r.remaining) { selTable = null; renderAll(); }
+  pay = newPay();
+  showReceipt(r.orderId, true);
+  if (S.settings.printer.autoPrint) setTimeout(() => printReceipt(r.orderId), 300);
+}
+
 // --- Chek ---
 function receiptHtml(o, cfg = S.settings.printer, info = S.settings) {
   const c = calc(o);
@@ -650,9 +817,12 @@ function receiptHtml(o, cfg = S.settings.printer, info = S.settings) {
       ${cfg.showAddress && info.address ? `<div>${esc(info.address)}</div>` : ""}
       ${cfg.showPhone && info.phone ? `<div>${esc(info.phone)}</div>` : ""}</div>
     <hr>
+    ${!o.paidAt ? `<div class="rc-c rc-bill">HISOB (to'lov uchun)</div>` : ""}
     <div class="rc-l"><span>Buyurtma</span><span>#${o.no}</span></div>
+    ${o.splitFrom ? `<div class="rc-l"><span>Bo'lib to'lov</span><span>#${o.splitFrom} dan</span></div>` : ""}
     <div class="rc-l"><span>Joy</span><span>${esc(placeName(o.hall, o.table))}</span></div>
     <div class="rc-l"><span>Sana</span><span>${dt(o.paidAt || o.createdAt)}</span></div>
+    ${Shared.waiterOf(o).name !== "—" ? `<div class="rc-l"><span>Ofitsiant</span><span>${esc(Shared.waiterOf(o).name)}</span></div>` : ""}
     ${cfg.showCashier && o.cashierName ? `<div class="rc-l"><span>Kassir</span><span>${esc(o.cashierName)}</span></div>` : ""}
     <hr>
     ${o.items.map((i) => `<div class="rc-item"><div>${esc(i.name)}</div><div class="rc-l"><span>${i.qty} × ${fmt(i.price)}</span><span>${fmt(i.qty * i.price)}</span></div></div>`).join("")}
@@ -679,6 +849,91 @@ function kitchenTicketHtml(k) {
     ${k.items.map((i) => `<div class="rc-l rc-kitchen"><span>${esc(i.name)}</span><b>× ${i.qty}</b></div>`).join("")}
     ${k.note ? `<hr><div>Izoh: ${esc(k.note)}</div>` : ""}
   </div>`;
+}
+
+function printKitchenTicket(k) {
+  printHtml(kitchenTicketHtml(k), { ...S.settings.printer, copies: 1 });
+}
+
+// ---- Tayyor taomni ofitsiantga topshirish ----
+function ticketWaiter(k) {
+  if (k.waiterName) return k.waiterName;
+  const o = S.orders.find((x) => x.id === k.orderId);
+  return o ? Shared.waiterOf(o).name : "";
+}
+function ticketWaiterId(k) {
+  if (k.waiterId != null) return k.waiterId;
+  const o = S.orders.find((x) => x.id === k.orderId);
+  return o ? Shared.waiterOf(o).id : null;
+}
+
+// Ofitsiant: o'z stollari (yoki ofitsianti belgilanmagan), kassir: hammasi
+function myReadyTickets() {
+  if (!me || !["ofitsiant", "kassir"].includes(me.role)) return [];
+  const openIds = new Set(S.orders.filter((o) => o.status === "open").map((o) => o.id)); // to'langan stollarniki kerak emas
+  return S.tickets.filter((k) => k.status === "ready" && openIds.has(k.orderId) && (me.role === "kassir" || ticketWaiterId(k) === me.id || ticketWaiterId(k) == null))
+    .sort((a, b) => new Date(a.readyAt || a.createdAt) - new Date(b.readyAt || b.createdAt));
+}
+
+let readyKnown = null;
+function renderReadyDock() {
+  const el = $("readyDock");
+  const list = myReadyTickets();
+  // Yangi tayyor buyurtma kelsa — ovoz va tebranish
+  const ids = new Set(list.map((k) => k.id));
+  if (readyKnown && list.some((k) => !readyKnown.has(k.id))) readyAlert();
+  readyKnown = me ? ids : null;
+  el.classList.toggle("hidden", !list.length);
+  if (!list.length) { el.innerHTML = ""; return; }
+  el.innerHTML = `
+    <div class="ready-head">${icon("chef")} Oshxonada tayyor <em>${list.length}</em></div>
+    ${list.map((k) => `
+      <div class="ready-card">
+        <div class="ready-top"><b>${esc(placeName(k.hall, k.table))}</b><span class="muted">#${k.orderNo} · ${mins(k.readyAt || k.createdAt)} daq oldin</span></div>
+        <div class="ready-items">${k.items.map((i) => `${i.qty}× ${esc(i.name)}`).join(", ")}</div>
+        ${me.role === "kassir" && ticketWaiter(k) ? `<div class="muted ready-w">Ofitsiant: ${esc(ticketWaiter(k))}</div>` : ""}
+        <button class="btn green full" onclick="pickUp(${k.id})">${icon("check")} Oldim — mijozga olib ketyapman</button>
+      </div>`).join("")}`;
+}
+
+async function pickUp(id) {
+  if (await act("ticket.set", { id, status: "served" })) toast("Topshirildi", "success");
+}
+
+function readyAlert() {
+  try {
+    const ctx = readyAlert.ctx || (readyAlert.ctx = new (window.AudioContext || window.webkitAudioContext)());
+    [0, 0.25].forEach((t) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = 880; o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(0.25, ctx.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.2);
+      o.start(ctx.currentTime + t); o.stop(ctx.currentTime + t + 0.2);
+    });
+  } catch (e) { /* ovoz o'chiq bo'lishi mumkin */ }
+  try { navigator.vibrate && navigator.vibrate([200, 100, 200]); } catch (e) {}
+  toast("Oshxonada buyurtma tayyor — olib keting!", "success");
+}
+
+// Oshxona ekranida avtomatik chek: yangi kelgan chiptalar shu qurilma printeridan chiqadi.
+// Qaysi chiptalar chiqarilgani shu qurilmada eslab qolinadi (qayta chiqmasin).
+const KPRINT_KEY = "kafe_pro_kitchen_printed";
+let kitchenSeen = null;
+function kitchenAutoPrint() {
+  const pc = S.settings.printer;
+  if (!me || view !== "kitchen" || !pc.kitchenPrint || pc.kitchenPrintAt !== "oshxona") { kitchenSeen = null; return; }
+  const fresh = S.tickets.filter((k) => k.status === "new");
+  if (kitchenSeen === null) {
+    // ekran ochilganda eski chiptalarni chiqarmaymiz — faqat bundan keyin kelganlarini
+    let saved = [];
+    try { saved = JSON.parse(lsGet(KPRINT_KEY) || "[]"); } catch (e) {}
+    kitchenSeen = new Set([...saved, ...fresh.map((k) => k.id)]);
+  }
+  const todo = fresh.filter((k) => !kitchenSeen.has(k.id));
+  if (!todo.length) return;
+  todo.forEach((k) => kitchenSeen.add(k.id));
+  lsSet(KPRINT_KEY, JSON.stringify([...kitchenSeen].slice(-200)));
+  printHtml(todo.map(kitchenTicketHtml).join('<div style="page-break-after: always"></div>'), { ...pc, copies: 1 });
 }
 
 // Printerga yuborish: qog'oz kengligi, shrift va nusxa soni sozlamalardan olinadi
@@ -760,7 +1015,7 @@ function dateBar(key, fn) {
 // ---------------------------------------------------------------------
 let ordFilter = "all";
 let ordSearch = "";
-const orderDate = (o) => o.paidAt || o.refundedAt || o.cancelledAt || o.createdAt;
+const orderDate = (o) => o.paidAt || o.refundedAt || o.cancelledAt || o.splitAt || o.createdAt;
 
 function renderOrders() {
   const filters = [["all", "Barchasi"], ["open", "Ochiq"], ["paid", "To'langan"], ["cancelled", "Bekor qilingan"]];
@@ -801,7 +1056,7 @@ function renderOrders() {
         return `<div class="ocard ${o.status}">
           <div class="ocard-top">
             <span class="avatar sm">${esc(initials(o.createdBy || "?"))}</span>
-            <div class="ocard-who"><b>${esc(o.createdBy || "—")}</b><small>#${o.no} · ${dt(orderDate(o))}</small></div>
+            <div class="ocard-who"><b>${esc(o.createdBy || "—")}</b><small>#${o.no}${o.splitFrom ? ` (#${o.splitFrom} dan)` : ""} · ${dt(orderDate(o))}</small></div>
             <span class="badge ${st[1]}">${st[0]}</span>
           </div>
           <div class="ocard-mid">
@@ -886,6 +1141,7 @@ function renderAdmin() {
       <div class="card kpi c-purple"><span>Hozir ochiq stollar</span><b>${open.length} ta</b><small>${money(open.reduce((s, o) => s + calc(o).total, 0))}</small></div>
     </div>
     ${admOrdersHtml(f)}
+    ${admWaitersHtml(f)}
     <div class="adm-grid">
       <div class="card table-wrap" style="padding:0">
         <div class="card-head adm-head">
@@ -957,6 +1213,29 @@ function admOrdersHtml(f) {
     </div>`;
 }
 
+// Admin panel: ofitsiantlar — kim nechta stolga xizmat qildi va qancha xizmat haqi oldi
+function admWaitersHtml(f) {
+  const paid = ordersFor(f, renderAdmin).filter((o) => o.status === "paid" && inRange(o.paidAt, f));
+  const g = {};
+  paid.forEach((o) => {
+    const w = Shared.waiterOf(o);
+    const r = g[w.name] || (g[w.name] = { name: w.name, n: 0, sales: 0, svc: 0 });
+    r.n++; r.sales += o.total; r.svc += o.serviceSum || 0;
+  });
+  const rows = Object.values(g).sort((a, b) => b.svc - a.svc || b.sales - a.sales);
+  const total = rows.reduce((s, r) => s + r.svc, 0);
+  return `
+    <div class="card mb table-wrap" style="padding:0">
+      <div class="card-head adm-head"><h3>${icon("users")} Ofitsiantlar — xizmat haqi (ofitsiant puli)</h3><span class="badge green">Jami: ${money(total)}</span></div>
+      <table class="tbl-list">
+        <thead><tr><th>Ofitsiant</th><th class="r">Stollar (cheklar)</th><th class="r">Savdo</th><th class="r">Xizmat haqi — beriladigan pul</th></tr></thead>
+        <tbody>${rows.map((r) => `<tr><td><b>${esc(r.name)}</b></td><td class="r">${r.n} ta</td><td class="r">${money(r.sales)}</td><td class="r"><b class="green-t">${money(r.svc)}</b></td></tr>`).join("")
+          || `<tr><td colspan="4"><div class="empty-state small"><span>Bu davrda to'langan buyurtma yo'q</span></div></td></tr>`}</tbody>
+      </table>
+      ${!S.halls.some((h) => h.service) ? `<p class="muted adm-note">Xizmat haqi hamma joyda 0%. Ofitsiant puli hisoblanishi uchun "Stollar" bo'limida joylarga foiz qo'ying.</p>` : ""}
+    </div>`;
+}
+
 function printDishSales() {
   const f = F.adm;
   const d = dishSales(f);
@@ -975,7 +1254,7 @@ function printDishSales() {
 // 9b. OSHXONA PANELI (oshpaz ekrani)
 // ---------------------------------------------------------------------
 function renderKitchen() {
-  const cols = [["new", "Yangi", "blue"], ["cooking", "Tayyorlanmoqda", "orange"], ["ready", "Tayyor — olib keting", "green"]];
+  const cols = [["new", "Yangi", "blue"], ["cooking", "Tayyorlanmoqda", "orange"], ["ready", "Tayyor — ofitsiantga topshiring", "green"]];
   const next = { new: ["cooking", "Boshlash", "primary"], cooking: ["ready", "Tayyor", "orange"], ready: ["served", "Berildi", "green"] };
   $("content").innerHTML = `
     <div class="page-head"><div><h2>Oshxona</h2><p class="muted">Kassadan yuborilgan buyurtmalar shu yerga tushadi. Tugmani bosib holatini o'zgartiring.</p></div></div>
@@ -989,7 +1268,11 @@ function renderKitchen() {
               <div class="ticket-top"><b>${esc(placeName(k.hall, k.table))}</b><span class="muted">#${k.orderNo} · ${tm(k.createdAt)} · ${mins(k.createdAt)} daq</span></div>
               <ul>${k.items.map((i) => `<li><b>${i.qty}×</b> ${esc(i.name)}</li>`).join("")}</ul>
               ${k.note ? `<div class="ticket-note">💬 ${esc(k.note)}</div>` : ""}
-              <button class="btn ${next[st][2]} full" onclick="setTicket(${k.id},'${next[st][0]}')">${next[st][1]}</button>
+              ${ticketWaiter(k) ? `<div class="ticket-waiter ${st}">${icon("users")} ${st === "ready" ? "Olib ketadi:" : "Ofitsiant:"} <b>${esc(ticketWaiter(k))}</b>${st === "ready" ? ` <span class="muted">· xabar yuborildi</span>` : ""}</div>` : ""}
+              <div class="ticket-btns">
+                <button class="btn ${next[st][2]} full" onclick="setTicket(${k.id},'${next[st][0]}')">${next[st][1]}</button>
+                <button class="btn" onclick="printKitchenTicket(S.tickets.find((x) => x.id === ${k.id}))" title="Chekni chiqarish">${icon("print")}</button>
+              </div>
             </div>`).join("") || `<div class="empty-state small"><span>Bo'sh</span></div>`}
         </div>`;
       }).join("")}
@@ -1129,13 +1412,13 @@ function renderSettings() {
           <thead><tr><th>Ism</th><th>Rol</th><th class="r"></th></tr></thead>
           <tbody>${S.staff.map((u) => `<tr>
             <td><div class="name-cell"><span class="avatar sm">${esc(initials(u.name))}</span><b>${esc(u.name)}</b></div></td>
-            <td><span class="badge ${{ admin: "purple", kassir: "blue", oshpaz: "orange" }[u.role]}">${ROLES[u.role]}</span></td>
+            <td><span class="badge ${{ admin: "purple", kassir: "blue", ofitsiant: "green", oshpaz: "orange" }[u.role]}">${ROLES[u.role]}</span></td>
             <td class="r nowrap">
               <button class="btn sm" onclick="openStaffForm(${u.id})" title="Tahrirlash">${icon("edit")}</button>
               ${u.id !== me.id ? `<button class="btn sm red" onclick="deleteStaff(${u.id})" title="O'chirish">${icon("trash")}</button>` : ""}
             </td></tr>`).join("")}</tbody>
         </table>
-        <p class="muted mt">Admin — Admin panel, Oshxona, Stollar, Menyu, Buyurtmalar, Sozlamalar. Kassir — Kassa, Buyurtmalar. Oshpaz — faqat Oshxona.</p>
+        <p class="muted mt">Admin — Admin panel, Oshxona, Stollar, Menyu, Buyurtmalar, Sozlamalar. Kassir — Kassa, Buyurtmalar. Ofitsiant — buyurtma olish va oshxonaga yuborish (to'lovsiz). Oshxona xodimi — faqat Oshxona paneli.</p>
       </div>
     </div>
     <div class="card mt">
@@ -1237,7 +1520,11 @@ function printerCard() {
           </div>
           <label>Avtomatik chop etish</label>
           ${chk("pAuto", c.autoPrint, "To'lovdan keyin chekni o'zi chiqarsin", "Kassir \"Chek chiqarish\"ni bosishi shart emas")}
-          ${chk("pKitchen", c.kitchenPrint, "Oshxonaga yuborilganda chek ham chiqsin", "Oshxonada alohida printer bo'lsa: narxsiz, stol, taomlar va izoh")}
+          ${chk("pKitchen", c.kitchenPrint, "Oshxona cheki chiqsin", "Oshxonaga yuborilganda narxsiz chek: stol, taomlar va izoh")}
+          <div class="kprint-at"><span class="muted">Oshxona cheki qaysi printerdan chiqadi:</span>
+            ${seg("pKitchenAt", c.kitchenPrintAt || "kassa", [["kassa", "Kassadagi printer"], ["oshxona", "Oshxona ekranidagi printer"]])}
+            <small class="muted">"Oshxona ekranidagi" — oshxonada printerli kompyuter/planshetda Oshxona paneli ochiq turadi va yangi buyurtma kelishi bilan chek o'zi chiqadi. Ofitsiant telefonidan yuborilganda ham shu ishlaydi.</small>
+          </div>
           <div class="row mt">
             <button class="btn primary" onclick="savePrinter()">Saqlash</button>
             <button class="btn" onclick="testPrint()">${icon("print")} Sinov cheki</button>
@@ -1276,7 +1563,8 @@ function readPrinterForm() {
     showPhone: $("pPhone").checked,
     showCashier: $("pCashier").checked,
     autoPrint: $("pAuto").checked,
-    kitchenPrint: $("pKitchen").checked
+    kitchenPrint: $("pKitchen").checked,
+    kitchenPrintAt: segVal("pKitchenAt")
   };
 }
 
@@ -1372,13 +1660,13 @@ async function resetAll() {
 // 13. Ishga tushirish
 // ---------------------------------------------------------------------
 const VIEWS = {
-  admin: renderAdmin, kassa: renderKassa, kitchen: renderKitchen, halls: renderHalls, menu: renderMenu, orders: renderOrders, settings: renderSettings
+  admin: renderAdmin, kassa: renderKassa, waiter: renderKassa, kitchen: renderKitchen, halls: renderHalls, menu: renderMenu, orders: renderOrders, settings: renderSettings
 };
 
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (modalOpen()) closeModal();
-  else if (me && view === "kassa" && selTable && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) backToTables();
+  else if (me && (view === "kassa" || view === "waiter") && selTable && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) backToTables();
 });
 
 applySidebar();
